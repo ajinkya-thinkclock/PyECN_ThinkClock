@@ -386,11 +386,17 @@ def run_simulation_and_visualize(config_file, skip_individual=False):
             current = current_from_record
         
         soc = cell.SoC_Cell_record[:cell.nt + 1]
-        temp_avg = cell.T_avg_record[:cell.nt + 1]
-        temp_std = cell.T_SD_record[:cell.nt + 1]
-        temp_delta = cell.T_Delta_record[:cell.nt + 1]
+        
+        # Temperature data - PyECN stores in Kelvin, convert to Celsius
+        temp_avg = cell.T_avg_record[:cell.nt + 1] - 273.15
+        temp_std = cell.T_SD_record[:cell.nt + 1]  # Temperature difference, no conversion needed
+        temp_delta = cell.T_Delta_record[:cell.nt + 1]  # Temperature difference, no conversion needed
         temp_min = temp_avg - temp_delta / 2
         temp_max = temp_avg + temp_delta / 2
+        
+        # Convert cooling and initial temps from Kelvin to Celsius
+        T_cooling = T_cooling - 273.15 if T_cooling > 100 else T_cooling
+        T_initial = T_initial - 273.15 if T_initial > 100 else T_initial
         
         print("\n" + "-"*70)
         print("Generating Interactive Visualizations...")
