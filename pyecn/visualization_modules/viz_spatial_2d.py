@@ -25,7 +25,7 @@ import toml
 
 
 def plot_temperature_2d(temp_2d, config_params, time_label="t=0s",
-                       save_path=None, show=False, ax=None, cbar_ax=None):
+                       save_path=None, show=True, ax=None, cbar_ax=None):
     """
     Plot 2D temperature distribution heatmap.
     
@@ -111,7 +111,7 @@ def plot_temperature_2d(temp_2d, config_params, time_label="t=0s",
 
 
 def plot_soc_2d(soc_2d, config_params, time_label="t=0s",
-               save_path=None, show=False, ax=None, cbar_ax=None):
+               save_path=None, show=True, ax=None, cbar_ax=None):
     """
     Plot 2D State of Charge distribution heatmap.
     
@@ -192,7 +192,7 @@ def plot_soc_2d(soc_2d, config_params, time_label="t=0s",
 
 
 def plot_voltage_2d(voltage_2d, config_params, time_label="t=0s",
-                   save_path=None, show=False, ax=None, cbar_ax=None):
+                   save_path=None, show=True, ax=None, cbar_ax=None):
     """
     Plot 2D voltage distribution heatmap.
     
@@ -274,7 +274,7 @@ def plot_voltage_2d(voltage_2d, config_params, time_label="t=0s",
 
 
 def plot_current_2d(current_2d, config_params, time_label="t=0s",
-                   save_path=None, show=False, ax=None, cbar_ax=None):
+                   save_path=None, show=True, ax=None, cbar_ax=None):
     """
     Plot 2D current distribution heatmap.
     
@@ -357,9 +357,9 @@ def plot_current_2d(current_2d, config_params, time_label="t=0s",
     return fig, ax
 
 
-def plot_all_spatial_2d(temp_2d, soc_2d, voltage_2d, current_2d,
+def plot_all_spatial_2d(temp_2d, soc_2d, voltage_2d, current_2d, 
                        config_params, time_label="t=0s",
-                       save_path=None, show=False):
+                       save_path=None, show=True):
     """
     Create a combined plot with all 2D spatial distributions.
     
@@ -636,8 +636,6 @@ def test_module(config_path=None):
             'Temp_levels': ip.status_levels,
             'V_highlimit': ip.V_highlimit_single,
             'V_lowlimit': ip.V_lowlimit_single,
-            'SoC_initial': ip.soc_initial,
-            'Model': ip.status_Model,
         }
         
         print("\n" + "-"*70)
@@ -659,28 +657,28 @@ def test_module(config_path=None):
         
         print("\n1. Temperature 2D Distribution")
         plot_temperature_2d(temp_2d, config_params, time_label=time_label,
-                           save_path="spatial_2d_temp.png")
+                           save_path="spatial_2d_temp.png", show=False)
         print("  ✓ Saved: spatial_2d_temp.png")
         
         print("\n2. SoC 2D Distribution")
         plot_soc_2d(soc_2d, config_params, time_label=time_label,
-                   save_path="spatial_2d_soc.png")
+                   save_path="spatial_2d_soc.png", show=False)
         print("  ✓ Saved: spatial_2d_soc.png")
         
         print("\n3. Voltage 2D Distribution")
         plot_voltage_2d(voltage_2d, config_params, time_label=time_label,
-                       save_path="spatial_2d_voltage.png")
+                       save_path="spatial_2d_voltage.png", show=False)
         print("  ✓ Saved: spatial_2d_voltage.png")
         
         print("\n4. Current 2D Distribution")
         plot_current_2d(current_2d, config_params, time_label=time_label,
-                       save_path="spatial_2d_current.png")
+                       save_path="spatial_2d_current.png", show=False)
         print("  ✓ Saved: spatial_2d_current.png")
         
         print("\n5. Combined 2D Spatial Plot")
         plot_all_spatial_2d(temp_2d, soc_2d, voltage_2d, current_2d,
                            config_params, time_label=time_label,
-                           save_path="spatial_2d_all.png")
+                           save_path="spatial_2d_all.png", show=False)
         print("  ✓ Saved: spatial_2d_all.png")
         
         print("\n" + "="*70)
