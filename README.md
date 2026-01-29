@@ -26,7 +26,7 @@ pouch.toml
 
 ## Visualization Modules
 
-PyECN includes comprehensive visualization modules for post-processing simulation results:
+PyECN_ThinkClock includes comprehensive visualization modules for post-processing simulation results:
 
 ### Individual Visualization Modules
 
