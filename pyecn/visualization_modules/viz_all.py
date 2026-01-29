@@ -191,7 +191,8 @@ def run_complete_visualization(config_path=None, output_dir=None):
         
         print("\n5. All Temperature Metrics (Combined)")
         plot_all_temperature(time, temp_avg, temp_min, temp_max, temp_delta, temp_std,
-                            cell_name, c_rate, T_cooling, T_initial,
+                            cell_name, form_factor, c_rate, model, coupling,
+                            T_cooling, T_initial,
                             save_path=output_dir / "temp_all.png")
         print("  ✓ Saved: temp_all.png")
         
@@ -286,30 +287,31 @@ def run_complete_visualization(config_path=None, output_dir=None):
         current_2d = np.mean(current) + 2 * np.sin(2*np.pi*X) * np.cos(2*np.pi*Y)
         
         time_val = time[-1] if len(time) > 0 else 0
+        time_label = f"t={time_val:.1f}s"
         
         print("\n1. Temperature 2D Heatmap")
-        plot_temperature_2d(temp_2d, config_params_spatial, time=time_val,
+        plot_temperature_2d(temp_2d, config_params_spatial, time_label=time_label,
                            save_path=output_dir / "spatial_2d_temperature.png")
         print("  ✓ Saved: spatial_2d_temperature.png")
         
         print("\n2. SoC 2D Heatmap")
-        plot_soc_2d(soc_2d, config_params_spatial, time=time_val,
+        plot_soc_2d(soc_2d, config_params_spatial, time_label=time_label,
                    save_path=output_dir / "spatial_2d_soc.png")
         print("  ✓ Saved: spatial_2d_soc.png")
         
         print("\n3. Voltage 2D Heatmap")
-        plot_voltage_2d(voltage_2d, config_params_spatial, time=time_val,
+        plot_voltage_2d(voltage_2d, config_params_spatial, time_label=time_label,
                        save_path=output_dir / "spatial_2d_voltage.png")
         print("  ✓ Saved: spatial_2d_voltage.png")
         
         print("\n4. Current 2D Heatmap")
-        plot_current_2d(current_2d, config_params_spatial, time=time_val,
+        plot_current_2d(current_2d, config_params_spatial, time_label=time_label,
                        save_path=output_dir / "spatial_2d_current.png")
         print("  ✓ Saved: spatial_2d_current.png")
         
         print("\n5. All 2D Spatial Plots (Combined)")
         plot_all_spatial_2d(temp_2d, soc_2d, voltage_2d, current_2d,
-                           config_params_spatial, time=time_val,
+                           config_params_spatial, time_label=time_label,
                            save_path=output_dir / "spatial_2d_all.png")
         print("  ✓ Saved: spatial_2d_all.png")
         
