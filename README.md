@@ -24,6 +24,59 @@ Enter config file name:
 pouch.toml
 ```
 
+## Visualization Modules
+
+PyECN includes comprehensive visualization modules for post-processing simulation results:
+
+### Individual Visualization Modules
+
+- **Temperature Visualizations** (`pyecn/visualization_modules/viz_temperature.py`)
+  - Average temperature vs time
+  - Min/max temperature vs time
+  - Temperature delta and standard deviation
+  - Unrolled jellyroll temperature distribution (cylindrical cells)
+  - Combined temperature plots
+
+- **Time-Series Visualizations** (`pyecn/visualization_modules/viz_timeseries.py`)
+  - Cell voltage vs time
+  - Current vs time
+  - State of Charge (SoC) vs time
+  - Combined time-series plots
+
+- **2D Spatial Visualizations** (`pyecn/visualization_modules/viz_spatial_2d.py`)
+  - Temperature 2D heatmaps
+  - SoC 2D spatial distribution
+  - Voltage 2D heatmaps
+  - Current density 2D heatmaps
+  - Combined spatial plots
+
+### Complete Visualization Suite
+
+Run all visualizations from a single simulation using `viz_all.py`:
+
+```bash
+# Default configuration
+$ python pyecn/visualization_modules/viz_all.py
+
+# Custom configuration file
+$ python pyecn/visualization_modules/viz_all.py config.toml
+
+# Custom configuration and output directory
+$ python pyecn/visualization_modules/viz_all.py config.toml output_folder
+```
+
+This generates 15+ visualization files including:
+- 6 temperature plots
+- 4 time-series plots
+- 5 spatial 2D heatmaps
+
+**Features:**
+- Single simulation run for all visualizations
+- Automatic extraction of parameters from TOML config files
+- Customizable output directories
+- Matplotlib-based plots (PNG export, 300 DPI)
+- Mayavi 3D visualization support for spatial temperature distributions
+
 
 ## Installing PyECN
 
