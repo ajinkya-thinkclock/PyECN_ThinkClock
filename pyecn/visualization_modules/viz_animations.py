@@ -123,7 +123,13 @@ def animate_current_vs_time(time, current, cell_name, c_rate,
     ax.axhline(y=0, color='k', linestyle='-', alpha=0.3, linewidth=1)
     
     ax.set_xlim(0, time_hours[-1] * 1.05)
-    ax.set_ylim(min(current_ds) * 1.1, max(current_ds) * 1.1)
+    # Handle constant current (min == max)
+    if abs(max(current_ds) - min(current_ds)) < 1e-6:
+        i_center = current_ds[0]
+        ax.set_ylim(i_center * 0.9 if i_center > 0 else i_center * 1.1, 
+                    i_center * 1.1 if i_center > 0 else i_center * 0.9)
+    else:
+        ax.set_ylim(min(current_ds) * 1.1, max(current_ds) * 1.1)
     ax.set_xlabel(time_label, fontsize=12, fontweight='bold')
     ax.set_ylabel('Current (A)', fontsize=12, fontweight='bold')
     ax.set_title(f'Cell Current - {cell_name} ({c_rate}C)', 
@@ -215,6 +221,11 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     """Create animated plot of temperature metrics vs time."""
     print(f"Creating temperature animation...")
     
+    # Check if temperature data is valid
+    if np.all(np.isnan(temp_avg)):
+        print(f"  ⚠ Warning: Temperature data is all NaN - skipping animation")
+        return
+    
     # Downsample
     indices = np.arange(0, len(time), downsample)
     time_ds = time[indices]
@@ -223,6 +234,17 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     temp_max_ds = temp_max[indices] - 273.15
     temp_delta_ds = temp_delta[indices]
     temp_std_ds = temp_std[indices]
+    
+    # Filter out NaN values for axis limits
+    valid_avg = temp_avg_ds[~np.isnan(temp_avg_ds)]
+    valid_min = temp_min_ds[~np.isnan(temp_min_ds)]
+    valid_max = temp_max_ds[~np.isnan(temp_max_ds)]
+    valid_delta = temp_delta_ds[~np.isnan(temp_delta_ds)]
+    valid_std = temp_std_ds[~np.isnan(temp_std_ds)]
+    
+    if len(valid_avg) == 0:
+        print(f"  ⚠ Warning: No valid temperature data - skipping animation")
+        return
     
     time_hours = time_ds / 3600 if np.max(time_ds) > 100 else time_ds
     time_label = "Time (h)" if np.max(time_ds) > 100 else "Time (s)"
@@ -246,7 +268,7 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     ax1.axhline(y=T_initial_c, color='g', linestyle='--', alpha=0.5, linewidth=1,
                 label=f'Initial Temp = {T_initial_c:.1f}°C')
     ax1.set_xlim(0, time_hours[-1] * 1.05)
-    ax1.set_ylim(min(temp_avg_ds) * 0.99, max(temp_avg_ds) * 1.01)
+    ax1.set_ylim(min(valid_avg) * 0.99, max(valid_avg) * 1.01)
     ax1.set_ylabel('Temperature (°C)', fontsize=11, fontweight='bold')
     ax1.set_title(f'Average Temperature - {cell_name} ({c_rate}C)', fontsize=12, fontweight='bold')
     ax1.grid(True, alpha=0.3, linestyle='--')
@@ -256,7 +278,7 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     line2_min, = ax2.plot([], [], 'b-', linewidth=2, label='Min Temperature')
     line2_max, = ax2.plot([], [], 'r-', linewidth=2, label='Max Temperature')
     ax2.set_xlim(0, time_hours[-1] * 1.05)
-    ax2.set_ylim(min(temp_min_ds) * 0.99, max(temp_max_ds) * 1.01)
+    ax2.set_ylim(min(valid_min) * 0.99, max(valid_max) * 1.01)
     ax2.set_ylabel('Temperature (°C)', fontsize=11, fontweight='bold')
     ax2.set_title(f'Min/Max Temperature - {cell_name} ({c_rate}C)', fontsize=12, fontweight='bold')
     ax2.grid(True, alpha=0.3, linestyle='--')
@@ -265,7 +287,7 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     # Panel 3: Temperature Delta
     line3, = ax3.plot([], [], 'orange', linewidth=2, label='Temperature Gradient')
     ax3.set_xlim(0, time_hours[-1] * 1.05)
-    ax3.set_ylim(0, max(temp_delta_ds) * 1.1)
+    ax3.set_ylim(0, max(valid_delta) * 1.1 if len(valid_delta) > 0 else 1)
     ax3.set_ylabel('Temp Delta (°C)', fontsize=11, fontweight='bold')
     ax3.set_title(f'Temperature Gradient - {cell_name} ({c_rate}C)', fontsize=12, fontweight='bold')
     ax3.grid(True, alpha=0.3, linestyle='--')
@@ -274,7 +296,7 @@ def animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, 
     # Panel 4: Temperature Std Dev
     line4, = ax4.plot([], [], 'purple', linewidth=2, label='Temperature Std Dev')
     ax4.set_xlim(0, time_hours[-1] * 1.05)
-    ax4.set_ylim(0, max(temp_std_ds) * 1.1)
+    ax4.set_ylim(0, max(valid_std) * 1.1 if len(valid_std) > 0 else 1)
     ax4.set_xlabel(time_label, fontsize=11, fontweight='bold')
     ax4.set_ylabel('Temp Std Dev (°C)', fontsize=11, fontweight='bold')
     ax4.set_title(f'Temperature Variation - {cell_name} ({c_rate}C)', fontsize=12, fontweight='bold')
@@ -329,6 +351,10 @@ def animate_all_timeseries(time, voltage, current, soc, temp_avg,
     soc_ds = soc[indices] * 100
     temp_ds = temp_avg[indices] - 273.15
     
+    # Check if temperature data is valid
+    valid_temp = temp_ds[~np.isnan(temp_ds)]
+    has_valid_temp = len(valid_temp) > 0
+    
     time_hours = time_ds / 3600 if np.max(time_ds) > 100 else time_ds
     time_label = "Time (h)" if np.max(time_ds) > 100 else "Time (s)"
     T_cooling_c = T_cooling - 273.15
@@ -359,7 +385,13 @@ def animate_all_timeseries(time, voltage, current, soc, temp_avg,
     line2, = ax2.plot([], [], 'r-', linewidth=2, label='Cell Current')
     ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3, linewidth=1)
     ax2.set_xlim(0, time_hours[-1] * 1.05)
-    ax2.set_ylim(min(current_ds) * 1.1, max(current_ds) * 1.1)
+    # Handle constant current
+    if abs(max(current_ds) - min(current_ds)) < 1e-6:
+        i_center = current_ds[0]
+        ax2.set_ylim(i_center * 0.9 if i_center > 0 else i_center * 1.1, 
+                     i_center * 1.1 if i_center > 0 else i_center * 0.9)
+    else:
+        ax2.set_ylim(min(current_ds) * 1.1, max(current_ds) * 1.1)
     ax2.set_ylabel('Current (A)', fontsize=11, fontweight='bold')
     ax2.set_title('Cell Current', fontsize=12, fontweight='bold')
     ax2.grid(True, alpha=0.3, linestyle='--')
@@ -381,7 +413,13 @@ def animate_all_timeseries(time, voltage, current, soc, temp_avg,
     ax4.axhline(y=T_cooling_c, color='b', linestyle='--', alpha=0.5, linewidth=1,
                 label=f'Cooling = {T_cooling_c:.1f}°C')
     ax4.set_xlim(0, time_hours[-1] * 1.05)
-    ax4.set_ylim(min(temp_ds) * 0.99, max(temp_ds) * 1.01)
+    if has_valid_temp:
+        ax4.set_ylim(min(valid_temp) * 0.99, max(valid_temp) * 1.01)
+    else:
+        ax4.set_ylim(T_cooling_c - 5, T_cooling_c + 5)
+        ax4.text(0.5, 0.5, 'Temperature data unavailable', 
+                transform=ax4.transAxes, ha='center', va='center',
+                fontsize=12, color='red', alpha=0.5)
     ax4.set_xlabel(time_label, fontsize=11, fontweight='bold')
     ax4.set_ylabel('Temperature (°C)', fontsize=11, fontweight='bold')
     ax4.set_title('Average Temperature', fontsize=12, fontweight='bold')
@@ -407,8 +445,11 @@ def animate_all_timeseries(time, voltage, current, soc, temp_avg,
         line1.set_data(time_hours[:frame+1], voltage_ds[:frame+1])
         line2.set_data(time_hours[:frame+1], current_ds[:frame+1])
         line3.set_data(time_hours[:frame+1], soc_ds[:frame+1])
-        line4.set_data(time_hours[:frame+1], temp_ds[:frame+1])
-        time_text.set_text(f'{time_label}: {time_hours[frame]:.2f} | V: {voltage_ds[frame]:.3f}V | SoC: {soc_ds[frame]:.1f}% | T: {temp_ds[frame]:.2f}°C')
+        if has_valid_temp:
+            line4.set_data(time_hours[:frame+1], temp_ds[:frame+1])
+            time_text.set_text(f'{time_label}: {time_hours[frame]:.2f} | V: {voltage_ds[frame]:.3f}V | SoC: {soc_ds[frame]:.1f}% | T: {temp_ds[frame]:.2f}°C')
+        else:
+            time_text.set_text(f'{time_label}: {time_hours[frame]:.2f} | V: {voltage_ds[frame]:.3f}V | SoC: {soc_ds[frame]:.1f}%')
         return line1, line2, line3, line4, time_text
     
     anim = FuncAnimation(fig, animate, init_func=init, frames=len(time_ds),
@@ -421,7 +462,7 @@ def animate_all_timeseries(time, voltage, current, soc, temp_avg,
     print(f"  ✓ Saved: {save_path} ({len(indices)} frames)")
 
 
-def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
+def run_simulation_and_animate(config_path=None, fps=30, downsample=10, dpi=100, skip_individual=False):
     """
     Run PyECN simulation and generate all time-series animations.
     
@@ -430,9 +471,13 @@ def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
     config_path : str or Path, optional
         Path to TOML config file. If None, uses cylindrical_tabless_Fig_3.toml
     fps : int
-        Frames per second for animations
+        Frames per second for animations (lower = faster, default: 30)
     downsample : int
-        Use every Nth data point (reduces file size and rendering time)
+        Use every Nth data point (higher = faster, default: 10)
+    dpi : int
+        Image resolution (lower = faster, default: 100)
+    skip_individual : bool
+        If True, only create combined animations (faster)
     """
     print("="*70)
     print("PyECN Time-Series Animation Generator")
@@ -444,7 +489,9 @@ def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
     config_path = Path(config_path)
     
     print(f"\nConfig file: {config_path}")
-    print(f"Animation settings: {fps} FPS, downsample={downsample}")
+    print(f"Animation settings: {fps} FPS, downsample={downsample}, dpi={dpi}")
+    if skip_individual:
+        print("Mode: Fast (combined animations only)")
     
     # Read TOML config directly
     with open(config_path, 'r') as f:
@@ -502,8 +549,18 @@ def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
         
         # Extract data
         time = cell.t_record[:cell.nt + 1]
-        voltage = cell.V_Cell_record[:cell.nt + 1]
-        current = cell.I_Cell_record[:cell.nt + 1]
+        voltage = cell.U_pndiff_plot[:cell.nt + 1]
+        
+        # Current: Check if I0_record has actual data, otherwise use applied current
+        current_from_record = cell.I0_record[:cell.nt + 1]
+        # Check if values after first one are populated (first value is always the applied current)
+        if len(current_from_record) > 1 and np.all(current_from_record[1:] == 0):
+            # Use the first value (applied current) for all time steps
+            current = np.full_like(time, current_from_record[0])
+            print(f"  Note: Using constant current ({current_from_record[0]:.3f} A) from I0_record[0]")
+        else:
+            current = current_from_record
+        
         soc = cell.SoC_Cell_record[:cell.nt + 1]
         temp_avg = cell.T_avg_record[:cell.nt + 1]
         temp_std = cell.T_SD_record[:cell.nt + 1]
@@ -515,22 +572,25 @@ def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
         print("Generating Animations...")
         print("-"*70)
         
-        print("\n1. Voltage Animation")
-        animate_voltage_vs_time(time, voltage, cell_name, c_rate, v_highlimit, v_lowlimit,
-                               save_path="anim_voltage.gif", fps=fps, downsample=downsample)
-        
-        print("\n2. Current Animation")
-        animate_current_vs_time(time, current, cell_name, c_rate,
-                               save_path="anim_current.gif", fps=fps, downsample=downsample)
-        
-        print("\n3. SoC Animation")
-        animate_soc_vs_time(time, soc, cell_name, c_rate,
-                           save_path="anim_soc.gif", fps=fps, downsample=downsample)
-        
-        print("\n4. Temperature Animation (4-panel)")
-        animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, temp_std,
-                                   cell_name, c_rate, T_cooling, T_initial,
-                                   save_path="anim_temperature.gif", fps=fps, downsample=downsample)
+        if not skip_individual:
+            print("\n1. Voltage Animation")
+            animate_voltage_vs_time(time, voltage, cell_name, c_rate, v_highlimit, v_lowlimit,
+                                   save_path="anim_voltage.gif", fps=fps, downsample=downsample)
+            
+            print("\n2. Current Animation")
+            animate_current_vs_time(time, current, cell_name, c_rate,
+                                   save_path="anim_current.gif", fps=fps, downsample=downsample)
+            
+            print("\n3. SoC Animation")
+            animate_soc_vs_time(time, soc, cell_name, c_rate,
+                               save_path="anim_soc.gif", fps=fps, downsample=downsample)
+            
+            print("\n4. Temperature Animation (4-panel)")
+            animate_temperature_vs_time(time, temp_avg, temp_min, temp_max, temp_delta, temp_std,
+                                       cell_name, c_rate, T_cooling, T_initial,
+                                       save_path="anim_temperature.gif", fps=fps, downsample=downsample)
+        else:
+            print("\nSkipping individual animations (--skip-individual flag)")
         
         print("\n5. Combined Time-Series Animation (4-panel)")
         animate_all_timeseries(time, voltage, current, soc, temp_avg,
@@ -540,12 +600,16 @@ def run_simulation_and_animate(config_path=None, fps=30, downsample=10):
         print("\n" + "="*70)
         print("✓ All animations complete!")
         print("="*70)
-        print("\nGenerated files:")
-        print("  - anim_voltage.gif")
-        print("  - anim_current.gif")
-        print("  - anim_soc.gif")
-        print("  - anim_temperature.gif")
-        print("  - anim_all_timeseries.gif")
+        if not skip_individual:
+            print("\nGenerated files:")
+            print("  - anim_voltage.gif")
+            print("  - anim_current.gif")
+            print("  - anim_soc.gif")
+            print("  - anim_temperature.gif")
+            print("  - anim_all_timeseries.gif")
+        else:
+            print("\nGenerated files:")
+            print("  - anim_all_timeseries.gif")
         print("="*70)
         
         return cell
@@ -563,15 +627,21 @@ if __name__ == "__main__":
     parser.add_argument('config', nargs='?', default=None, 
                        help='Path to TOML config file')
     parser.add_argument('--fps', type=int, default=30,
-                       help='Frames per second (default: 30)')
+                       help='Frames per second (default: 30, use 10-15 for faster)')
     parser.add_argument('--downsample', type=int, default=10,
-                       help='Use every Nth data point (default: 10)')
+                       help='Use every Nth data point (default: 10, use 50-100 for faster)')
+    parser.add_argument('--dpi', type=int, default=100,
+                       help='Image resolution (default: 100, use 75 for faster)')
+    parser.add_argument('--skip-individual', action='store_true',
+                       help='Skip individual animations, only create combined ones')
     
     args = parser.parse_args()
     
     if args.config:
-        run_simulation_and_animate(args.config, fps=args.fps, downsample=args.downsample)
+        run_simulation_and_animate(args.config, fps=args.fps, downsample=args.downsample, 
+                                  dpi=args.dpi, skip_individual=args.skip_individual)
     else:
-        print("Usage: python viz_animations.py [config_file.toml] [--fps 30] [--downsample 10]")
+        print("Usage: python viz_animations.py [config_file.toml] [--fps 15] [--downsample 50] [--dpi 75] [--skip-individual]")
         print("Running with default config...\n")
-        run_simulation_and_animate(fps=args.fps, downsample=args.downsample)
+        run_simulation_and_animate(fps=args.fps, downsample=args.downsample, 
+                                  dpi=args.dpi, skip_individual=args.skip_individual)
