@@ -11,9 +11,10 @@ import os
 
 
 def create_interactive_voltage_plot(time, voltage, cell_name, c_rate, v_highlimit, v_lowlimit,
-                                     save_path="voltage_interactive.html"):
+                                     output_dir="interactive_plots"):
     """Create interactive voltage vs time plot."""
     print(f"Creating interactive voltage plot...")
+    save_path = os.path.join(output_dir, "voltage_interactive.html")
     
     time_hours = time / 3600 if np.max(time) > 100 else time
     time_label = "Time (h)" if np.max(time) > 100 else "Time (s)"
@@ -54,9 +55,10 @@ def create_interactive_voltage_plot(time, voltage, cell_name, c_rate, v_highlimi
 
 
 def create_interactive_current_plot(time, current, cell_name, c_rate,
-                                     save_path="current_interactive.html"):
+                                     output_dir="interactive_plots"):
     """Create interactive current vs time plot."""
     print(f"Creating interactive current plot...")
+    save_path = os.path.join(output_dir, "current_interactive.html")
     
     time_hours = time / 3600 if np.max(time) > 100 else time
     time_label = "Time (h)" if np.max(time) > 100 else "Time (s)"
@@ -92,9 +94,10 @@ def create_interactive_current_plot(time, current, cell_name, c_rate,
 
 
 def create_interactive_soc_plot(time, soc, cell_name, c_rate,
-                                 save_path="soc_interactive.html"):
+                                 output_dir="interactive_plots"):
     """Create interactive SoC vs time plot."""
     print(f"Creating interactive SoC plot...")
+    save_path = os.path.join(output_dir, "soc_interactive.html")
     
     time_hours = time / 3600 if np.max(time) > 100 else time
     time_label = "Time (h)" if np.max(time) > 100 else "Time (s)"
@@ -131,9 +134,10 @@ def create_interactive_soc_plot(time, soc, cell_name, c_rate,
 
 def create_interactive_temperature_plot(time, temp_avg, temp_min, temp_max, temp_delta, temp_std,
                                         cell_name, c_rate, T_cooling, T_initial,
-                                        save_path="temperature_interactive.html"):
+                                        output_dir="interactive_plots"):
     """Create interactive temperature 4-panel plot."""
     print(f"Creating interactive temperature plot...")
+    save_path = os.path.join(output_dir, "temperature_interactive.html")
     
     # Check for valid temperature data
     has_valid_temp = not (np.all(np.isnan(temp_avg)) or np.all(np.isnan(temp_min)) or 
@@ -222,9 +226,10 @@ def create_interactive_temperature_plot(time, temp_avg, temp_min, temp_max, temp
 
 def create_interactive_combined_plot(time, voltage, current, soc, temp_avg,
                                      cell_name, c_rate, v_highlimit, v_lowlimit, T_cooling,
-                                     save_path="timeseries_interactive.html"):
+                                     output_dir="interactive_plots"):
     """Create interactive combined 4-panel time-series plot."""
     print(f"Creating interactive combined plot...")
+    save_path = os.path.join(output_dir, "timeseries_interactive.html")
     
     time_hours = time / 3600 if np.max(time) > 100 else time
     time_label = "Time (h)" if np.max(time) > 100 else "Time (s)"
@@ -398,42 +403,51 @@ def run_simulation_and_visualize(config_file, skip_individual=False):
         T_cooling = T_cooling - 273.15 if T_cooling > 100 else T_cooling
         T_initial = T_initial - 273.15 if T_initial > 100 else T_initial
         
+        # Create output directory
+        output_dir = "interactive_plots"
+        os.makedirs(output_dir, exist_ok=True)
+        
         print("\n" + "-"*70)
         print("Generating Interactive Visualizations...")
         print("-"*70)
+        print(f"Output directory: {os.path.abspath(output_dir)}")
         
         if not skip_individual:
             print("\n1. Voltage Plot")
-            create_interactive_voltage_plot(time, voltage, cell_name, c_rate, v_highlimit, v_lowlimit)
+            create_interactive_voltage_plot(time, voltage, cell_name, c_rate, v_highlimit, v_lowlimit,
+                                          output_dir=output_dir)
             
             print("\n2. Current Plot")
-            create_interactive_current_plot(time, current, cell_name, c_rate)
+            create_interactive_current_plot(time, current, cell_name, c_rate,
+                                          output_dir=output_dir)
             
             print("\n3. SoC Plot")
-            create_interactive_soc_plot(time, soc, cell_name, c_rate)
+            create_interactive_soc_plot(time, soc, cell_name, c_rate,
+                                      output_dir=output_dir)
             
             print("\n4. Temperature Plot (4-panel)")
             create_interactive_temperature_plot(time, temp_avg, temp_min, temp_max, temp_delta, temp_std,
-                                               cell_name, c_rate, T_cooling, T_initial)
+                                               cell_name, c_rate, T_cooling, T_initial,
+                                               output_dir=output_dir)
         else:
             print("\nSkipping individual plots (--skip-individual flag)")
         
         print("\n5. Combined Time-Series Plot (4-panel)")
         create_interactive_combined_plot(time, voltage, current, soc, temp_avg,
-                                        cell_name, c_rate, v_highlimit, v_lowlimit, T_cooling)
+                                        cell_name, c_rate, v_highlimit, v_lowlimit, T_cooling,
+                                        output_dir=output_dir)
         
         print("\n" + "="*70)
         print("✓ All visualizations complete!")
         print("="*70)
+        print(f"\nGenerated files in {os.path.abspath(output_dir)}/:")
         if not skip_individual:
-            print("\nGenerated files:")
             print("  - voltage_interactive.html")
             print("  - current_interactive.html")
             print("  - soc_interactive.html")
             print("  - temperature_interactive.html")
             print("  - timeseries_interactive.html")
         else:
-            print("\nGenerated files:")
             print("  - timeseries_interactive.html")
         print("\nOpen any HTML file in your browser to explore the data!")
         print("="*70)
