@@ -20,6 +20,8 @@ cycler==0.11.0
     # via matplotlib
 decorator==4.4.2
     # via moviepy
+dash==2.17.1
+    # via PyECN (pyproject.toml)
 envisage==7.0.3
     # via mayavi
 et-xmlfile==1.1.0
@@ -99,6 +101,8 @@ six==1.16.0
 tenacity==8.2.2
     # via plotly
 tomli==2.0.1
+    # via PyECN (pyproject.toml)
+toml==0.10.2
     # via PyECN (pyproject.toml)
 tqdm==4.65.0
     # via

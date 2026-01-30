@@ -16,9 +16,11 @@ dependencies = [
     "numpy",
     "openpyxl",
     "pandas",
+    "dash",
     "plotly",
     "PyQt5",
     "scipy",
+    "toml",
     "tomli"
 ]
 
