@@ -30,6 +30,7 @@ MANIFEST
 *.gif
 *.html
 .github/
+*.npz
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -54,6 +55,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+
+pyecn/browser_visualizations/uploads/
 
 # Translations
 *.mo
