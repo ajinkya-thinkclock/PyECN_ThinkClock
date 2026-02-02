@@ -64,8 +64,7 @@ TIMES = deque(maxlen=MAX_LENGTH)
 HEARTBEAT_VALUES = deque(maxlen=MAX_LENGTH)
 START_TIME = time.time()
 
-APP_VERSION = str(int(time.time()))
-app = dash.Dash(__name__, assets_version=APP_VERSION)
+app = dash.Dash(__name__)
 app.config.suppress_callback_exceptions = True
 
 
@@ -153,16 +152,15 @@ def _run_pyecn_sim_async(config_path: Path) -> None:
 
 
 def _get_temp3d_trace(cell, time_index: int, max_points: int = 8000) -> go.Scatter3d:
-    if hasattr(cell, "xi_4T"):
+    T = cell.T_record[:, time_index] - 273.15
+    if hasattr(cell, "xi_4T") and len(cell.xi_4T) == len(T):
         x = cell.xi_4T
         y = cell.yi_4T
         z = cell.zi_4T
-        T = cell.T_record[:, time_index] - 273.15
     else:
         x = cell.xi
         y = cell.yi
         z = cell.zi
-        T = cell.T_record[:, time_index] - 273.15
 
     n = len(T)
     if n > max_points:
@@ -186,9 +184,10 @@ def _get_electrode_temp_map(cell, time_index: int) -> Tuple[np.ndarray, np.ndarr
         n_v = cell.ny
         n_h = int(np.size(cell.Al_4T) / n_v)
         ind0_Al_4T = cell.Al_4T.reshape(n_v, n_h)
-        x = cell.xi_4T[ind0_Al_4T]
-        y = (cell.LG_Jellyroll - cell.yi_4T[ind0_Al_4T])
-        z = cell.T_record[:, time_index][ind0_Al_4T] - 273.15
+        x = np.asarray(cell.xi_4T[ind0_Al_4T], dtype=float)
+        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+        y = (lg - np.asarray(cell.yi_4T[ind0_Al_4T], dtype=float))
+        z = np.asarray(cell.T_record[:, time_index][ind0_Al_4T], dtype=float) - 273.15
         return x, y, z
 
     data = extract_from_pyecn_cell(cell, time_index=time_index)
@@ -214,11 +213,18 @@ def _make_temp_map_fig(cell, time_index: int) -> go.Figure:
         fig.add_annotation(text="Temperature map has no finite values", x=0.5, y=0.5, showarrow=False)
         return fig
 
+    x1 = x[0] if x.ndim == 2 else x
+    y1 = y[:, 0] if y.ndim == 2 else y
+    if x1.size == 0 or y1.size == 0:
+        fig = _empty_fig("Electrode Temperature Map")
+        fig.add_annotation(text="Temperature map has empty axes", x=0.5, y=0.5, showarrow=False)
+        return fig
+
     fig = go.Figure(
         data=go.Heatmap(
             z=z,
-            x=x[0] if x.ndim == 2 else x,
-            y=y[:, 0] if y.ndim == 2 else y,
+            x=x1,
+            y=y1,
             colorscale="RdBu_r",
             colorbar=dict(title="°C"),
         )
@@ -245,9 +251,18 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
             rouI = cell.I_ele_record[:, time_index][ind0_ele_Elb_4T] / (
                 cell.Axy_ele[ind0_ele_Elb_4T, 0] * scalefactor_z
             )
+            rouI = np.asarray(rouI, dtype=float)
+            if rouI.size == 0 or not np.isfinite(rouI).any():
+                fig = _empty_fig("Current Density (Electrode)")
+                fig.add_annotation(text="Current density has no finite values", x=0.5, y=0.5, showarrow=False)
+                return fig
 
-            array_h = cell.xi_4T[ind0_Elb_4T]
-            array_v = (cell.LG_Jellyroll - cell.yi_4T[ind0_Elb_4T]) if hasattr(cell, "LG_Jellyroll") else cell.yi_4T[ind0_Elb_4T]
+            array_h = np.asarray(cell.xi_4T[ind0_Elb_4T], dtype=float)
+            if hasattr(cell, "LG_Jellyroll"):
+                lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+                array_v = lg - np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
+            else:
+                array_v = np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
 
             if hasattr(cell, "Spiral_Sep_s_real") and hasattr(cell, "Spiral_Sep_s"):
                 scale = cell.Spiral_Sep_s_real / cell.Spiral_Sep_s
@@ -290,6 +305,101 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
 
     fig = _empty_fig("Current Density (2D Slice)")
     fig.add_annotation(text="No current data in results", x=0.5, y=0.5, showarrow=False)
+    return fig
+
+
+def _make_voltage_fig(cell) -> go.Figure:
+    if hasattr(cell, "U_pndiff_plot"):
+        v = np.asarray(cell.U_pndiff_plot, dtype=float)
+        time_vec = SIM_STATE["time"]
+        v = v[: len(time_vec)]
+        fig = go.Figure(data=go.Scatter(x=time_vec, y=v, mode="lines", name="Voltage"))
+        fig.update_layout(title="Voltage vs Time", xaxis_title="Time (s)", yaxis_title="Voltage (V)")
+        return fig
+
+    if hasattr(cell, "V_record"):
+        v = np.asarray(cell.V_record, dtype=float)
+        time_vec = SIM_STATE["time"]
+        if v.ndim == 2:
+            v_mean = np.mean(v, axis=0)
+            v_mean = v_mean[: len(time_vec)]
+            fig = go.Figure(data=go.Scatter(x=time_vec, y=v_mean, mode="lines", name="Voltage"))
+            fig.update_layout(title="Voltage vs Time (mean node voltage)", xaxis_title="Time (s)", yaxis_title="Voltage (V)")
+            return fig
+
+    fig = _empty_fig("Voltage vs Time")
+    fig.add_annotation(text="No voltage data in results", x=0.5, y=0.5, showarrow=False)
+    return fig
+
+
+def _make_soc_heatmap_fig(cell, time_index: int) -> go.Figure:
+    if not hasattr(cell, "SoC_ele_record"):
+        fig = _empty_fig("SoC Heatmap (Electrode)")
+        fig.add_annotation(text="No SoC_ele_record in results", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    required = ["SoC_ele_record", "List_node2ele_4T", "Elb_4T", "xi_4T", "yi_4T"]
+    if not all(hasattr(cell, k) for k in required):
+        fig = _empty_fig("SoC Heatmap (Electrode)")
+        fig.add_annotation(text="Missing electrode mapping arrays", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    n_v = cell.ny
+    n_h = int(np.size(cell.Elb_4T) / n_v)
+    ind0_Elb_4T = cell.Elb_4T.reshape(n_v, n_h)
+    ind0_ele_Elb_4T = cell.List_node2ele_4T[ind0_Elb_4T, 0]
+
+    soc = cell.SoC_ele_record[:, time_index][ind0_ele_Elb_4T] * 100
+    soc = np.asarray(soc, dtype=float)
+    if soc.size == 0 or not np.isfinite(soc).any():
+        fig = _empty_fig("SoC Heatmap (Electrode)")
+        fig.add_annotation(text="SoC heatmap has no finite values", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    array_h = np.asarray(cell.xi_4T[ind0_Elb_4T], dtype=float)
+    if hasattr(cell, "LG_Jellyroll"):
+        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+        array_v = lg - np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
+    else:
+        array_v = np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
+
+    if hasattr(cell, "Spiral_Sep_s_real") and hasattr(cell, "Spiral_Sep_s"):
+        array_h = array_h * (cell.Spiral_Sep_s_real / cell.Spiral_Sep_s)
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=soc,
+            x=array_h[0],
+            y=array_v[:, 0],
+            colorscale="Viridis",
+            colorbar=dict(title="SoC (%)"),
+        )
+    )
+    fig.update_layout(title="SoC Heatmap (Electrode)", xaxis_title="Unrolled Distance", yaxis_title="Axial Position")
+    return fig
+
+
+def _make_heatgen_fig(cell) -> go.Figure:
+    if not hasattr(cell, "q_4T_record") or not hasattr(cell, "V_stencil_4T_ALL"):
+        fig = _empty_fig("Heat Generation vs Time")
+        fig.add_annotation(text="No q_4T_record/V_stencil_4T_ALL in results", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    q = np.asarray(cell.q_4T_record, dtype=float)
+    v = np.asarray(cell.V_stencil_4T_ALL, dtype=float).reshape(-1)
+    ntotal_4T = int(getattr(cell, "ntotal_4T", len(v)))
+    v = v[:ntotal_4T]
+    q = q[:ntotal_4T, :]
+    if q.size == 0 or not np.isfinite(q).any():
+        fig = _empty_fig("Heat Generation vs Time")
+        fig.add_annotation(text="Heat generation has no finite values", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    power = np.sum(q * v[:, None], axis=0)
+    time_vec = SIM_STATE["time"]
+    power = power[: len(time_vec)]
+    fig = go.Figure(data=go.Scatter(x=time_vec, y=power, mode="lines", name="Heat Gen"))
+    fig.update_layout(title="Heat Generation vs Time", xaxis_title="Time (s)", yaxis_title="W")
     return fig
 
 
@@ -369,7 +479,8 @@ def _empty_fig(title: str) -> go.Figure:
 
 app.layout = html.Div(
     [
-        html.H2("PyECN Live Browser Visualization"),
+        html.H1("PyECN Live Browser Visualization", style={"marginBottom": "6px"}),
+        html.Div("Interactive battery simulation dashboard", style={"color": "#6b7280", "marginBottom": "16px"}),
         html.Div(
             [
                 dcc.Upload(id="config-upload", children=html.Button("Upload Config TOML")),
@@ -381,21 +492,43 @@ app.layout = html.Div(
                     children=html.Div(id="run-status", children="Idle", style={"marginTop": "10px"}),
                 ),
             ],
-            style={"display": "flex", "gap": "10px", "alignItems": "center"},
+            style={
+                "display": "flex",
+                "gap": "10px",
+                "alignItems": "center",
+                "background": "#ffffff",
+                "padding": "12px",
+                "borderRadius": "10px",
+                "boxShadow": "0 2px 6px rgba(0,0,0,0.06)",
+                "border": "1px solid #e5e7eb",
+            },
         ),
-        html.Div(id="heartbeat", children="UI heartbeat: 0", style={"marginTop": "6px", "color": "#666"}),
-        html.Pre(id="run-log", style={"whiteSpace": "pre-wrap", "background": "#f7f7f7", "padding": "10px", "border": "1px solid #ddd"}),
-        html.Pre(id="results-meta", style={"whiteSpace": "pre-wrap", "background": "#f7f7f7", "padding": "10px", "border": "1px solid #ddd"}),
+        html.Div(
+            [
+                html.Div(id="heartbeat", children="UI heartbeat: 0", style={"color": "#6b7280"}),
+                html.Div(id="run-log-title", children="Run Log", style={"fontWeight": "600", "marginTop": "8px"}),
+                html.Pre(id="run-log", style={"whiteSpace": "pre-wrap", "background": "#f9fafb", "padding": "10px", "border": "1px solid #e5e7eb", "borderRadius": "8px"}),
+                html.Div(id="results-meta-title", children="Results Keys", style={"fontWeight": "600", "marginTop": "8px"}),
+                html.Pre(id="results-meta", style={"whiteSpace": "pre-wrap", "background": "#f9fafb", "padding": "10px", "border": "1px solid #e5e7eb", "borderRadius": "8px"}),
+            ],
+            style={"marginTop": "12px", "background": "#ffffff", "padding": "12px", "borderRadius": "10px", "border": "1px solid #e5e7eb"},
+        ),
         dcc.Interval(id="heartbeat-interval", interval=1000, n_intervals=0),
         dcc.Interval(id="status-interval", interval=500, n_intervals=0),
-        html.Hr(),
+        html.Hr(style={"margin": "20px 0"}),
         html.Div(
             [
                 html.Button("Play", id="play-btn", n_clicks=0),
                 html.Button("Pause", id="pause-btn", n_clicks=0),
                 dcc.Slider(id="time-slider", min=0, max=0, step=1, value=0),
             ],
-            style={"marginBottom": "20px"},
+            style={
+                "marginBottom": "20px",
+                "background": "#ffffff",
+                "padding": "12px",
+                "borderRadius": "10px",
+                "border": "1px solid #e5e7eb",
+            },
         ),
         dcc.Interval(id="play-interval", interval=200, n_intervals=0, disabled=True),
         dcc.Store(id="play-state", data={"playing": False}),
@@ -403,16 +536,23 @@ app.layout = html.Div(
         html.Div(
             [
                 dcc.Graph(id="temp-map"),
+                dcc.Graph(id="soc-heatmap"),
+                dcc.Graph(id="voltage-plot"),
                 dcc.Graph(id="soc-plot"),
                 dcc.Graph(id="current-density"),
-                dcc.Graph(id="temp-3d"),
+                dcc.Graph(id="heatgen-plot"),
                 dcc.Graph(id="temp-stats"),
                 dcc.Graph(id="heartbeat-graph"),
             ],
             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"},
         ),
     ],
-    style={"padding": "20px"},
+    style={
+        "padding": "24px",
+        "background": "#f3f4f6",
+        "fontFamily": "Segoe UI, Roboto, Arial, sans-serif",
+        "color": "#111827",
+    },
 )
 
 
@@ -508,9 +648,11 @@ def advance_time(n, play_state, current_value, sim_meta):
 
 @app.callback(
     Output("temp-map", "figure"),
+    Output("soc-heatmap", "figure"),
+    Output("voltage-plot", "figure"),
     Output("soc-plot", "figure"),
     Output("current-density", "figure"),
-    Output("temp-3d", "figure"),
+    Output("heatgen-plot", "figure"),
     Output("temp-stats", "figure"),
     Input("time-slider", "value"),
     Input("status-interval", "n_intervals"),
@@ -520,9 +662,11 @@ def update_plots(time_index, _n_intervals):
     if cell is None:
         return (
             _empty_fig("Electrode Temperature Map"),
+            _empty_fig("SoC Heatmap (Electrode)"),
+            _empty_fig("Voltage vs Time"),
             _empty_fig("State of Charge"),
             _empty_fig("Current Density (2D Slice)"),
-            _empty_fig("3D Temperature Map"),
+            _empty_fig("Heat Generation vs Time"),
             _empty_fig("Temperature Min/Max/Avg"),
         )
 
@@ -531,12 +675,14 @@ def update_plots(time_index, _n_intervals):
         time_index = min(time_index, SIM_STATE["nt"] - 1)
 
     temp_map = _make_temp_map_fig(cell, time_index)
+    soc_heatmap = _make_soc_heatmap_fig(cell, time_index)
+    voltage_fig = _make_voltage_fig(cell)
     soc_fig = _make_soc_fig(cell)
     current_fig = _make_current_density_fig(cell, time_index)
-    temp3d_fig = _make_temp3d_fig(cell, time_index)
+    heatgen_fig = _make_heatgen_fig(cell)
     temp_stats = _make_temp_stats_fig(cell)
 
-    return temp_map, soc_fig, current_fig, temp3d_fig, temp_stats
+    return temp_map, soc_heatmap, voltage_fig, soc_fig, current_fig, heatgen_fig, temp_stats
 
 
 @app.callback(

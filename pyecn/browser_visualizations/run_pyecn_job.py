@@ -75,6 +75,9 @@ def main() -> int:
         "SoC_ele_record": getattr(cell, "SoC_ele_record", None),
         "I_record": getattr(cell, "I_record", None),
         "I_ele_record": getattr(cell, "I_ele_record", None),
+        "U_pndiff_plot": getattr(cell, "U_pndiff_plot", None),
+        "I0_record": getattr(cell, "I0_record", None),
+        "SoC": getattr(cell, "SoC", None),
         "V_record": getattr(cell, "V_record", None),
         "t_record": getattr(cell, "t_record", None),
         "xi": getattr(cell, "xi", None),
@@ -97,6 +100,9 @@ def main() -> int:
         "Lx_electrodes_real": getattr(cell, "Lx_electrodes_real", None),
         "Ly_electrodes_real": getattr(cell, "Ly_electrodes_real", None),
         "status_FormFactor": getattr(cell, "status_FormFactor", None),
+        "q_4T_record": getattr(cell, "q_4T_record", None),
+        "V_stencil_4T_ALL": getattr(cell, "V_stencil_4T_ALL", None),
+        "ntotal_4T": getattr(cell, "ntotal_4T", None),
     }
 
     # Save only non-None arrays/values
