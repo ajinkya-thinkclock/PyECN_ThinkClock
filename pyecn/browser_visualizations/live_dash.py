@@ -44,7 +44,7 @@ UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 LOG_MAX_LINES = 200
-LOG_MAX_CHARS = 20000
+LOG_MAX_CHARS = 2000
 LOG_LINES = deque(maxlen=LOG_MAX_LINES)
 LOG_LOCK = threading.Lock()
 
@@ -57,12 +57,16 @@ SIM_STATE = {
     "last_error": None,
     "results_path": None,
     "results_meta": {},
+    "cache": {},
+    "series_cache": {},
 }
 
 MAX_LENGTH = 100
 TIMES = deque(maxlen=MAX_LENGTH)
 HEARTBEAT_VALUES = deque(maxlen=MAX_LENGTH)
 START_TIME = time.time()
+PLAYBACK_INTERVAL_MS = 200
+PLAYBACK_MIN_INTERVAL_MS = 10
 
 app = dash.Dash(__name__)
 app.config.suppress_callback_exceptions = True
@@ -80,6 +84,10 @@ def _prepare_config(config_path: Path, current_csv_path: Optional[Path]) -> Path
     config = toml.load(config_path)
     if current_csv_path is not None:
         config.setdefault("operating_conditions", {})["I_ext_fpath"] = str(current_csv_path)
+    post = config.setdefault("postprocessing", {})
+    post.setdefault("Fig1to9", "No")
+    post.setdefault("PopFig_or_SaveGIF_instant", "No")
+    post.setdefault("PopFig_or_SaveGIF_replay", "No")
     temp_config = UPLOAD_DIR / f"run_{config_path.stem}.toml"
     with open(temp_config, "w", encoding="utf-8") as f:
         toml.dump(config, f)
@@ -100,6 +108,8 @@ def _load_results(results_path: Path) -> None:
     SIM_STATE["nt"] = int(getattr(cell, "nt", 0))
     dt = float(getattr(cell, "dt", 1.0))
     SIM_STATE["time"] = np.arange(SIM_STATE["nt"]) * dt
+    SIM_STATE["cache"] = {}
+    SIM_STATE["series_cache"] = {}
     SIM_STATE["results_meta"] = {k: getattr(data[k], "shape", None) for k in data.files}
     if hasattr(cell, "T_record"):
         tmin = np.nanmin(cell.T_record)
@@ -107,6 +117,79 @@ def _load_results(results_path: Path) -> None:
         SIM_STATE["results_meta"]["T_record_minmax_K"] = (float(tmin), float(tmax))
     if not data.files:
         SIM_STATE["last_message"] = "Simulation finished but results file is empty."
+        return
+
+    cache = SIM_STATE["cache"]
+    if hasattr(cell, "Al_4T") and hasattr(cell, "xi_4T") and hasattr(cell, "yi_4T"):
+        n_v = cell.ny
+        n_h = int(np.size(cell.Al_4T) / n_v)
+        ind0_Al_4T = cell.Al_4T.reshape(n_v, n_h)
+        x = np.asarray(cell.xi_4T[ind0_Al_4T], dtype=float)
+        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+        y = (lg - np.asarray(cell.yi_4T[ind0_Al_4T], dtype=float))
+        cache["temp_map_ind0"] = ind0_Al_4T
+        cache["temp_map_x"] = x
+        cache["temp_map_y"] = y
+
+    if all(hasattr(cell, k) for k in ["Elb_4T", "xi_4T", "yi_4T", "List_node2ele_4T"]):
+        n_v = cell.ny
+        n_h = int(np.size(cell.Elb_4T) / n_v)
+        ind0_Elb_4T = cell.Elb_4T.reshape(n_v, n_h)
+        ind0_ele_Elb_4T = cell.List_node2ele_4T[ind0_Elb_4T, 0]
+        array_h = np.asarray(cell.xi_4T[ind0_Elb_4T], dtype=float)
+        if hasattr(cell, "LG_Jellyroll"):
+            lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+            array_v = lg - np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
+        else:
+            array_v = np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
+        if hasattr(cell, "Spiral_Sep_s_real") and hasattr(cell, "Spiral_Sep_s"):
+            array_h = array_h * (cell.Spiral_Sep_s_real / cell.Spiral_Sep_s)
+        elif hasattr(cell, "SpiralandStripe_Sep_s_real"):
+            array_h = array_h * cell.SpiralandStripe_Sep_s_real
+        cache["ind0_Elb_4T"] = ind0_Elb_4T
+        cache["ind0_ele_Elb_4T"] = ind0_ele_Elb_4T
+        cache["array_h"] = array_h
+        cache["array_v"] = array_v
+
+    series = SIM_STATE["series_cache"]
+    time_vec = SIM_STATE["time"]
+    if hasattr(cell, "U_pndiff_plot"):
+        v = np.asarray(cell.U_pndiff_plot, dtype=float)
+        series["voltage"] = v[: len(time_vec)]
+    elif hasattr(cell, "V_record"):
+        v = np.asarray(cell.V_record, dtype=float)
+        if v.ndim == 2:
+            series["voltage"] = np.mean(v, axis=0)[: len(time_vec)]
+
+    if hasattr(cell, "SoC_Cell_record"):
+        series["soc"] = np.asarray(cell.SoC_Cell_record, dtype=float) * 100
+
+    if hasattr(cell, "I_record"):
+        i = np.asarray(cell.I_record, dtype=float)
+        if i.ndim == 2:
+            i = np.mean(i, axis=0)
+        series["current"] = i[: len(time_vec)]
+    elif hasattr(cell, "I0_record"):
+        i = np.asarray(cell.I0_record, dtype=float)
+        if i.ndim == 2:
+            i = np.mean(i, axis=0)
+        series["current"] = i[: len(time_vec)]
+
+    if hasattr(cell, "T_record"):
+        T = np.asarray(cell.T_record, dtype=float) - 273.15
+        if T.size:
+            series["temp_min"] = np.min(T, axis=0)
+            series["temp_max"] = np.max(T, axis=0)
+            series["temp_avg"] = np.mean(T, axis=0)
+
+    if hasattr(cell, "q_4T_record") and hasattr(cell, "V_stencil_4T_ALL"):
+        q = np.asarray(cell.q_4T_record, dtype=float)
+        v = np.asarray(cell.V_stencil_4T_ALL, dtype=float).reshape(-1)
+        ntotal_4T = int(getattr(cell, "ntotal_4T", len(v)))
+        v = v[:ntotal_4T]
+        q = q[:ntotal_4T, :]
+        if q.size:
+            series["heatgen"] = np.sum(q * v[:, None], axis=0)
 
 
 def _run_pyecn_sim_async(config_path: Path) -> None:
@@ -180,13 +263,11 @@ def _get_temp3d_trace(cell, time_index: int, max_points: int = 8000) -> go.Scatt
 
 
 def _get_electrode_temp_map(cell, time_index: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if hasattr(cell, "Al_4T") and hasattr(cell, "xi_4T"):
-        n_v = cell.ny
-        n_h = int(np.size(cell.Al_4T) / n_v)
-        ind0_Al_4T = cell.Al_4T.reshape(n_v, n_h)
-        x = np.asarray(cell.xi_4T[ind0_Al_4T], dtype=float)
-        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
-        y = (lg - np.asarray(cell.yi_4T[ind0_Al_4T], dtype=float))
+    cache = SIM_STATE.get("cache", {})
+    if "temp_map_ind0" in cache and hasattr(cell, "T_record"):
+        ind0_Al_4T = cache["temp_map_ind0"]
+        x = cache["temp_map_x"]
+        y = cache["temp_map_y"]
         z = np.asarray(cell.T_record[:, time_index][ind0_Al_4T], dtype=float) - 273.15
         return x, y, z
 
@@ -226,6 +307,7 @@ def _make_temp_map_fig(cell, time_index: int) -> go.Figure:
             x=x1,
             y=y1,
             colorscale="RdBu_r",
+            zsmooth="best",
             colorbar=dict(title="°C"),
         )
     )
@@ -240,12 +322,11 @@ def _make_temp_map_fig(cell, time_index: int) -> go.Figure:
 
 def _make_current_density_fig(cell, time_index: int) -> go.Figure:
     required = ["I_ele_record", "Axy_ele", "List_node2ele_4T", "Elb_4T", "xi_4T", "yi_4T"]
-    if all(hasattr(cell, k) for k in required):
+    cache = SIM_STATE.get("cache", {})
+    if all(hasattr(cell, k) for k in required) and "ind0_Elb_4T" in cache:
         try:
-            n_v = cell.ny
-            n_h = int(np.size(cell.Elb_4T) / n_v)
-            ind0_Elb_4T = cell.Elb_4T.reshape(n_v, n_h)
-            ind0_ele_Elb_4T = cell.List_node2ele_4T[ind0_Elb_4T, 0]
+            ind0_Elb_4T = cache["ind0_Elb_4T"]
+            ind0_ele_Elb_4T = cache["ind0_ele_Elb_4T"]
 
             scalefactor_z = getattr(cell, "scalefactor_z", 1.0)
             rouI = cell.I_ele_record[:, time_index][ind0_ele_Elb_4T] / (
@@ -257,18 +338,8 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
                 fig.add_annotation(text="Current density has no finite values", x=0.5, y=0.5, showarrow=False)
                 return fig
 
-            array_h = np.asarray(cell.xi_4T[ind0_Elb_4T], dtype=float)
-            if hasattr(cell, "LG_Jellyroll"):
-                lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
-                array_v = lg - np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
-            else:
-                array_v = np.asarray(cell.yi_4T[ind0_Elb_4T], dtype=float)
-
-            if hasattr(cell, "Spiral_Sep_s_real") and hasattr(cell, "Spiral_Sep_s"):
-                scale = cell.Spiral_Sep_s_real / cell.Spiral_Sep_s
-                array_h = array_h * scale
-            elif hasattr(cell, "SpiralandStripe_Sep_s_real"):
-                array_h = array_h * cell.SpiralandStripe_Sep_s_real
+            array_h = cache.get("array_h")
+            array_v = cache.get("array_v")
 
             fig = go.Figure(
                 data=go.Heatmap(
@@ -308,24 +379,16 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
     return fig
 
 
-def _make_voltage_fig(cell) -> go.Figure:
-    if hasattr(cell, "U_pndiff_plot"):
-        v = np.asarray(cell.U_pndiff_plot, dtype=float)
+def _make_voltage_fig(cell, time_index: int) -> go.Figure:
+    series = SIM_STATE.get("series_cache", {})
+    if "voltage" in series:
+        v = np.asarray(series["voltage"], dtype=float)
         time_vec = SIM_STATE["time"]
-        v = v[: len(time_vec)]
-        fig = go.Figure(data=go.Scatter(x=time_vec, y=v, mode="lines", name="Voltage"))
+        end = min(len(time_vec), time_index + 1)
+        v = v[:end]
+        fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=v, mode="lines", name="Voltage"))
         fig.update_layout(title="Voltage vs Time", xaxis_title="Time (s)", yaxis_title="Voltage (V)")
         return fig
-
-    if hasattr(cell, "V_record"):
-        v = np.asarray(cell.V_record, dtype=float)
-        time_vec = SIM_STATE["time"]
-        if v.ndim == 2:
-            v_mean = np.mean(v, axis=0)
-            v_mean = v_mean[: len(time_vec)]
-            fig = go.Figure(data=go.Scatter(x=time_vec, y=v_mean, mode="lines", name="Voltage"))
-            fig.update_layout(title="Voltage vs Time (mean node voltage)", xaxis_title="Time (s)", yaxis_title="Voltage (V)")
-            return fig
 
     fig = _empty_fig("Voltage vs Time")
     fig.add_annotation(text="No voltage data in results", x=0.5, y=0.5, showarrow=False)
@@ -379,33 +442,26 @@ def _make_soc_heatmap_fig(cell, time_index: int) -> go.Figure:
     return fig
 
 
-def _make_heatgen_fig(cell) -> go.Figure:
-    if not hasattr(cell, "q_4T_record") or not hasattr(cell, "V_stencil_4T_ALL"):
+def _make_heatgen_fig(cell, time_index: int) -> go.Figure:
+    series = SIM_STATE.get("series_cache", {})
+    if "heatgen" not in series:
         fig = _empty_fig("Heat Generation vs Time")
         fig.add_annotation(text="No q_4T_record/V_stencil_4T_ALL in results", x=0.5, y=0.5, showarrow=False)
         return fig
 
-    q = np.asarray(cell.q_4T_record, dtype=float)
-    v = np.asarray(cell.V_stencil_4T_ALL, dtype=float).reshape(-1)
-    ntotal_4T = int(getattr(cell, "ntotal_4T", len(v)))
-    v = v[:ntotal_4T]
-    q = q[:ntotal_4T, :]
-    if q.size == 0 or not np.isfinite(q).any():
-        fig = _empty_fig("Heat Generation vs Time")
-        fig.add_annotation(text="Heat generation has no finite values", x=0.5, y=0.5, showarrow=False)
-        return fig
-
-    power = np.sum(q * v[:, None], axis=0)
+    power = np.asarray(series["heatgen"], dtype=float)
     time_vec = SIM_STATE["time"]
-    power = power[: len(time_vec)]
-    fig = go.Figure(data=go.Scatter(x=time_vec, y=power, mode="lines", name="Heat Gen"))
+    end = min(len(time_vec), time_index + 1)
+    power = power[:end]
+    fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=power, mode="lines", name="Heat Gen"))
     fig.update_layout(title="Heat Generation vs Time", xaxis_title="Time (s)", yaxis_title="W")
     return fig
 
 
-def _make_soc_fig(cell) -> go.Figure:
-    if hasattr(cell, "SoC_Cell_record"):
-        soc = np.asarray(cell.SoC_Cell_record, dtype=float) * 100
+def _make_soc_fig(cell, time_index: int) -> go.Figure:
+    series = SIM_STATE.get("series_cache", {})
+    if "soc" in series:
+        soc = np.asarray(series["soc"], dtype=float)
         time_vec = SIM_STATE["time"]
     else:
         fig = _empty_fig("State of Charge")
@@ -415,32 +471,51 @@ def _make_soc_fig(cell) -> go.Figure:
         fig = _empty_fig("State of Charge")
         fig.add_annotation(text="SoC series has no finite values", x=0.5, y=0.5, showarrow=False)
         return fig
-    fig = go.Figure(data=go.Scatter(x=time_vec, y=soc, mode="lines", name="SoC"))
+    end = min(len(time_vec), time_index + 1)
+    fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=soc[:end], mode="lines", name="SoC"))
     fig.update_layout(title="State of Charge", xaxis_title="Time (s)", yaxis_title="SoC (%)")
     return fig
 
 
-def _make_temp_stats_fig(cell) -> go.Figure:
-    if not hasattr(cell, "T_record"):
+def _make_current_fig(cell, time_index: int) -> go.Figure:
+    series = SIM_STATE.get("series_cache", {})
+    if "current" in series:
+        current = np.asarray(series["current"], dtype=float)
+        time_vec = SIM_STATE["time"]
+    else:
+        fig = _empty_fig("Current vs Time")
+        fig.add_annotation(text="No I_record/I0_record in results", x=0.5, y=0.5, showarrow=False)
+        return fig
+    if current.size == 0 or not np.isfinite(current).any():
+        fig = _empty_fig("Current vs Time")
+        fig.add_annotation(text="Current series has no finite values", x=0.5, y=0.5, showarrow=False)
+        return fig
+    if len(current) > 1:
+        current = current.copy()
+        current[0] = current[1]
+    end = min(len(time_vec), time_index + 1)
+    fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=current[:end], mode="lines", name="Current"))
+    fig.update_layout(title="Current vs Time", xaxis_title="Time (s)", yaxis_title="Current (A)")
+    return fig
+
+
+def _make_temp_stats_fig(cell, time_index: int) -> go.Figure:
+    series = SIM_STATE.get("series_cache", {})
+    if not ("temp_min" in series and "temp_max" in series and "temp_avg" in series):
         fig = _empty_fig("Temperature Min/Max/Avg")
         fig.add_annotation(text="No T_record in results", x=0.5, y=0.5, showarrow=False)
         return fig
 
-    T = np.asarray(cell.T_record, dtype=float) - 273.15
-    if T.size == 0 or not np.isfinite(T).any():
-        fig = _empty_fig("Temperature Min/Max/Avg")
-        fig.add_annotation(text="Temperature series has no finite values", x=0.5, y=0.5, showarrow=False)
-        return fig
-
     t = SIM_STATE["time"]
-    tmin = np.min(T, axis=0)
-    tmax = np.max(T, axis=0)
-    tavg = np.mean(T, axis=0)
+    tmin = np.asarray(series["temp_min"], dtype=float)
+    tmax = np.asarray(series["temp_max"], dtype=float)
+    tavg = np.asarray(series["temp_avg"], dtype=float)
+    end = min(len(t), time_index + 1)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=t, y=tavg, name="Avg"))
-    fig.add_trace(go.Scatter(x=t, y=tmin, name="Min"))
-    fig.add_trace(go.Scatter(x=t, y=tmax, name="Max"))
+    fig.add_trace(go.Scatter(x=t[:end], y=tavg[:end], name="Avg"))
+    fig.add_trace(go.Scatter(x=t[:end], y=tmin[:end], name="Min"))
+    fig.add_trace(go.Scatter(x=t[:end], y=tmax[:end], name="Max"))
     fig.update_layout(title="Temperature Min/Max/Avg", xaxis_title="Time (s)", yaxis_title="°C")
     return fig
 
@@ -521,6 +596,26 @@ app.layout = html.Div(
                 html.Button("Play", id="play-btn", n_clicks=0),
                 html.Button("Pause", id="pause-btn", n_clicks=0),
                 dcc.Slider(id="time-slider", min=0, max=0, step=1, value=0),
+                html.Div(
+                    [
+                        html.Div("Playback speed", style={"fontSize": "12px", "color": "#6b7280"}),
+                        dcc.Dropdown(
+                            id="speed-dropdown",
+                            options=[
+                                {"label": "1x", "value": 1},
+                                {"label": "2x", "value": 2},
+                                {"label": "5x", "value": 5},
+                                {"label": "10x", "value": 10},
+                                {"label": "20x", "value": 20},
+                            ],
+                            value=1,
+                            clearable=False,
+                            style={"width": "140px"},
+                        ),
+                        html.Div(id="speed-info", style={"fontSize": "12px", "color": "#6b7280", "marginTop": "4px"}),
+                    ],
+                    style={"marginTop": "8px"},
+                ),
             ],
             style={
                 "marginBottom": "20px",
@@ -530,14 +625,16 @@ app.layout = html.Div(
                 "border": "1px solid #e5e7eb",
             },
         ),
-        dcc.Interval(id="play-interval", interval=200, n_intervals=0, disabled=True),
+        dcc.Interval(id="play-interval", interval=PLAYBACK_INTERVAL_MS, n_intervals=0, disabled=True),
         dcc.Store(id="play-state", data={"playing": False}),
         dcc.Store(id="sim-meta", data={"nt": 0}),
+        dcc.Store(id="playback-meta", data={"interval_ms": PLAYBACK_INTERVAL_MS, "speed": 1}),
         html.Div(
             [
                 dcc.Graph(id="temp-map"),
                 dcc.Graph(id="soc-heatmap"),
                 dcc.Graph(id="voltage-plot"),
+                dcc.Graph(id="current-plot"),
                 dcc.Graph(id="soc-plot"),
                 dcc.Graph(id="current-density"),
                 dcc.Graph(id="heatgen-plot"),
@@ -628,19 +725,42 @@ def toggle_play(play_clicks, pause_clicks, state):
 
 
 @app.callback(
+    Output("play-interval", "interval"),
+    Output("speed-info", "children"),
+    Output("playback-meta", "data"),
+    Input("speed-dropdown", "value"),
+)
+def update_play_interval(speed_value):
+    try:
+        speed = max(1, int(speed_value))
+    except (TypeError, ValueError):
+        speed = 1
+    interval_ms = max(PLAYBACK_MIN_INTERVAL_MS, int(PLAYBACK_INTERVAL_MS / speed))
+    info = f"Interval: {interval_ms} ms (target {int(1000/interval_ms)} fps)"
+    return interval_ms, info, {"interval_ms": interval_ms, "speed": speed}
+
+
+@app.callback(
     Output("time-slider", "value"),
     Input("play-interval", "n_intervals"),
+    Input("playback-meta", "data"),
     State("play-state", "data"),
     State("time-slider", "value"),
     State("sim-meta", "data"),
 )
-def advance_time(n, play_state, current_value, sim_meta):
+def advance_time(n, playback_meta, play_state, current_value, sim_meta):
     if not play_state.get("playing"):
         return current_value
     nt = sim_meta.get("nt", 0)
     if nt == 0:
         return current_value
-    next_value = current_value + 1
+    step = 1
+    if isinstance(playback_meta, dict):
+        try:
+            step = max(1, int(playback_meta.get("speed", 1)))
+        except (TypeError, ValueError):
+            step = 1
+    next_value = current_value + step
     if next_value >= nt:
         return nt - 1
     return next_value
@@ -650,6 +770,7 @@ def advance_time(n, play_state, current_value, sim_meta):
     Output("temp-map", "figure"),
     Output("soc-heatmap", "figure"),
     Output("voltage-plot", "figure"),
+    Output("current-plot", "figure"),
     Output("soc-plot", "figure"),
     Output("current-density", "figure"),
     Output("heatgen-plot", "figure"),
@@ -664,6 +785,7 @@ def update_plots(time_index, _n_intervals):
             _empty_fig("Electrode Temperature Map"),
             _empty_fig("SoC Heatmap (Electrode)"),
             _empty_fig("Voltage vs Time"),
+            _empty_fig("Current vs Time"),
             _empty_fig("State of Charge"),
             _empty_fig("Current Density (2D Slice)"),
             _empty_fig("Heat Generation vs Time"),
@@ -676,13 +798,14 @@ def update_plots(time_index, _n_intervals):
 
     temp_map = _make_temp_map_fig(cell, time_index)
     soc_heatmap = _make_soc_heatmap_fig(cell, time_index)
-    voltage_fig = _make_voltage_fig(cell)
-    soc_fig = _make_soc_fig(cell)
+    voltage_fig = _make_voltage_fig(cell, time_index)
+    current_plot = _make_current_fig(cell, time_index)
+    soc_fig = _make_soc_fig(cell, time_index)
     current_fig = _make_current_density_fig(cell, time_index)
-    heatgen_fig = _make_heatgen_fig(cell)
-    temp_stats = _make_temp_stats_fig(cell)
+    heatgen_fig = _make_heatgen_fig(cell, time_index)
+    temp_stats = _make_temp_stats_fig(cell, time_index)
 
-    return temp_map, soc_heatmap, voltage_fig, soc_fig, current_fig, heatgen_fig, temp_stats
+    return temp_map, soc_heatmap, voltage_fig, current_plot, soc_fig, current_fig, heatgen_fig, temp_stats
 
 
 @app.callback(

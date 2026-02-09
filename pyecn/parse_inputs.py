@@ -103,6 +103,7 @@ status_TemBC_smoothening = runtime_opts["TemBC_smoothing"]
 status_CheckBC_4T = runtime_opts["CheckBC_4T"]
 status_get_unecessary_info = runtime_opts["Get_unnecessary_info"]
 status_Count = runtime_opts["Count"]
+status_Count_interval = runtime_opts.get("Count_step_interval", 1)
 
 
 C_rate = op_conds["C_rate"]
@@ -124,8 +125,10 @@ C_rate_Module = module_params["C_rate_module"]
 if op_conds["I_ext_fpath"] == "":
     nt = int(3600/op_conds["C_rate"]/op_conds["dt"])
 else:  # use time-varying current
-    Table_I_ext = np.loadtxt(op_conds["I_ext_fpath"])
-    nt = np.size(Table_I_ext)-1
+    Table_I_ext = np.loadtxt(op_conds["I_ext_fpath"], delimiter=",", skiprows=1)
+    if Table_I_ext.ndim == 2:
+        Table_I_ext = Table_I_ext[:, 1]
+    nt = len(Table_I_ext) - 1
 if status_FormFactor != "Pouch":
     status_ThermalBC_Core = op_conds["Thermal_BC_core"]
     n_Air = op_conds["n_air"]

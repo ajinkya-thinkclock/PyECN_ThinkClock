@@ -553,27 +553,33 @@ def run() -> None:
             t_5=time.time() if ip.status_Count=='Yes' else []
             ############################################################################print running time
             if ip.status_Count=='Yes':
-                if (t_5-t_1)<=1e-10:
-                    print('total time cost is %f (s), which is too small to calculate percentage of each part\n'%(t_5-t_1) )
-                else:
-                    print('%s for the entire cell is %f (mm)'%('Thickness' if ip.status_FormFactor=='Pouch' else 'Largest radius', cell_1.delta_cell*1e3))
-                    if ip.status_Model=='EandT'or ip.status_Model=='E':
-                        print('R0 for the entire cell is %f (Ω)'%(1/np.sum(1/cell_1.R0_pair[:,2])))
-                        print('SoC for the entire cell is %.2f%%'%(cell_1.SoC[step]*100))
-                        print('\ntime cost of the step is %f (s)' %(t_5-t_1) )
-                        print('on 1-2 (MatrixC)   : %f (s), %.2f%%' %(t_2-t_1, (t_2-t_1)/(t_5-t_1)*100) )
-                        if ip.status_Electrical_type != 'SPMe':
-                            print('wherein interp: %f (s)' %(cell_1.duration_R0_interp + cell_1.duration_Ri_interp + cell_1.duration_Ci_interp + cell_1.duration_OCV_interp) )
-                            print('wherein OCV interp: %f (s)' %cell_1.duration_OCV_interp )
-                            print('wherein R0 interp: %f (s)' %cell_1.duration_R0_interp )
-                            print('wherein Ri interp: %f (s)' %cell_1.duration_Ri_interp )
-                            print('wherein Ci interp: %f (s)' %cell_1.duration_Ci_interp )
-                        print('on 2-3 (Equation E): %f (s), %.2f%%' %(t_3-t_2, (t_3-t_2)/(t_5-t_1)*100) )
-                    if ip.status_Model=='EandT'or ip.status_Model=='T':
-                        print('on 3-4 (Equation T): %f (s), %.2f%%' %(t_4-t_3, (t_4-t_3)/(t_5-t_1)*100) )
-                    print('on 4-5 (Plotting)  : %f (s), %.2f%%' %(t_5-t_4, (t_5-t_4)/(t_5-t_1)*100) )
-                    print('expected remaining time: %.2f (s) or %.2f (min) or %.2f (h)' %((t_5-t_1)*(cell_1.nt-step),(t_5-t_1)*(cell_1.nt-step)/60,(t_5-t_1)*(cell_1.nt-step)/3600) )
-                    print('----------------------------------------')
+                should_report = (
+                    step == 1
+                    or step == cell_1.nt
+                    or (ip.status_Count_interval > 0 and step % ip.status_Count_interval == 0)
+                )
+                if should_report:
+                    if (t_5-t_1)<=1e-10:
+                        print('total time cost is %f (s), which is too small to calculate percentage of each part\n'%(t_5-t_1) )
+                    else:
+                        print('%s for the entire cell is %f (mm)'%('Thickness' if ip.status_FormFactor=='Pouch' else 'Largest radius', cell_1.delta_cell*1e3))
+                        if ip.status_Model=='EandT'or ip.status_Model=='E':
+                            print('R0 for the entire cell is %f (Ω)'%(1/np.sum(1/cell_1.R0_pair[:,2])))
+                            print('SoC for the entire cell is %.2f%%'%(cell_1.SoC[step]*100))
+                            print('\ntime cost of the step is %f (s)' %(t_5-t_1) )
+                            print('on 1-2 (MatrixC)   : %f (s), %.2f%%' %(t_2-t_1, (t_2-t_1)/(t_5-t_1)*100) )
+                            if ip.status_Electrical_type != 'SPMe':
+                                print('wherein interp: %f (s)' %(cell_1.duration_R0_interp + cell_1.duration_Ri_interp + cell_1.duration_Ci_interp + cell_1.duration_OCV_interp) )
+                                print('wherein OCV interp: %f (s)' %cell_1.duration_OCV_interp )
+                                print('wherein R0 interp: %f (s)' %cell_1.duration_R0_interp )
+                                print('wherein Ri interp: %f (s)' %cell_1.duration_Ri_interp )
+                                print('wherein Ci interp: %f (s)' %cell_1.duration_Ci_interp )
+                            print('on 2-3 (Equation E): %f (s), %.2f%%' %(t_3-t_2, (t_3-t_2)/(t_5-t_1)*100) )
+                        if ip.status_Model=='EandT'or ip.status_Model=='T':
+                            print('on 3-4 (Equation T): %f (s), %.2f%%' %(t_4-t_3, (t_4-t_3)/(t_5-t_1)*100) )
+                        print('on 4-5 (Plotting)  : %f (s), %.2f%%' %(t_5-t_4, (t_5-t_4)/(t_5-t_1)*100) )
+                        print('expected remaining time: %.2f (s) or %.2f (min) or %.2f (h)' %((t_5-t_1)*(cell_1.nt-step),(t_5-t_1)*(cell_1.nt-step)/60,(t_5-t_1)*(cell_1.nt-step)/3600) )
+                        print('----------------------------------------')
             ############################################################################judge discharge/charge limit
             if ip.status_Module == 'No':
                 if step==cell_1.nt:
