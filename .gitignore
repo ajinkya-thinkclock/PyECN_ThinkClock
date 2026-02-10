@@ -137,3 +137,6 @@ dmypy.json
 
 # PyCharm project file
 .idea
+pyecn/browser_visualizations/uploads/results_1769770542.npz
+*.csv
+*.npz

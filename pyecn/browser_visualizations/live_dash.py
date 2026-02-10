@@ -85,9 +85,12 @@ def _prepare_config(config_path: Path, current_csv_path: Optional[Path]) -> Path
     if current_csv_path is not None:
         config.setdefault("operating_conditions", {})["I_ext_fpath"] = str(current_csv_path)
     post = config.setdefault("postprocessing", {})
-    post.setdefault("Fig1to9", "No")
-    post.setdefault("PopFig_or_SaveGIF_instant", "No")
-    post.setdefault("PopFig_or_SaveGIF_replay", "No")
+    post["PostProcessor"] = "No"
+    post["PostProcessor_module"] = "No"
+    post["Visualisation_method"] = "none"
+    post["Fig1to9"] = "No"
+    post["PopFig_or_SaveGIF_instant"] = "No"
+    post["PopFig_or_SaveGIF_replay"] = "No"
     temp_config = UPLOAD_DIR / f"run_{config_path.stem}.toml"
     with open(temp_config, "w", encoding="utf-8") as f:
         toml.dump(config, f)
@@ -438,6 +441,24 @@ def _make_soc_heatmap_fig(cell, time_index: int) -> go.Figure:
             colorbar=dict(title="SoC (%)"),
         )
     )
+    if soc.ndim == 2 and soc.shape[0] > 1 and soc.shape[1] > 1:
+        grad_y, grad_x = np.gradient(soc)
+        grad_mag = np.sqrt(grad_x**2 + grad_y**2)
+        vmax = float(np.nanmax(grad_mag)) if np.isfinite(grad_mag).any() else 0.0
+        if vmax > 0:
+            fig.add_trace(
+                go.Heatmap(
+                    z=grad_mag,
+                    x=array_h[0],
+                    y=array_v[:, 0],
+                    colorscale="Turbo",
+                    zmin=0,
+                    zmax=vmax,
+                    opacity=0.35,
+                    showscale=False,
+                    hoverinfo="skip",
+                )
+            )
     fig.update_layout(title="SoC Heatmap (Electrode)", xaxis_title="Unrolled Distance", yaxis_title="Axial Position")
     return fig
 
@@ -639,7 +660,6 @@ app.layout = html.Div(
                 dcc.Graph(id="current-density"),
                 dcc.Graph(id="heatgen-plot"),
                 dcc.Graph(id="temp-stats"),
-                dcc.Graph(id="heartbeat-graph"),
             ],
             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"},
         ),
@@ -810,7 +830,6 @@ def update_plots(time_index, _n_intervals):
 
 @app.callback(
     Output("heartbeat", "children"),
-    Output("heartbeat-graph", "figure"),
     Output("run-log", "children"),
     Input("heartbeat-interval", "n_intervals"),
 )
@@ -819,31 +838,12 @@ def update_heartbeat(n):
     TIMES.append(current_time)
     HEARTBEAT_VALUES.append(n)
 
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=list(TIMES),
-            y=list(HEARTBEAT_VALUES),
-            mode="lines+markers",
-            name="Heartbeat",
-            line=dict(color="#e74c3c", width=2),
-            marker=dict(size=6),
-        )
-    )
-    fig.update_layout(
-        title="Heartbeat Over Time",
-        xaxis_title="Time (seconds)",
-        yaxis_title="Heartbeat Count",
-        template="plotly_white",
-        hovermode="x unified",
-    )
-
     with LOG_LOCK:
         log_text = "\n".join(LOG_LINES)
         if len(log_text) > LOG_MAX_CHARS:
             log_text = "... (truncated) ...\n" + log_text[-LOG_MAX_CHARS:]
 
-    return f"UI heartbeat: {n}", fig, log_text
+    return f"UI heartbeat: {n}", log_text
 
 
 def main() -> None:
