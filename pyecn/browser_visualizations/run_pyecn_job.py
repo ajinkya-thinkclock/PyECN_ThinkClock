@@ -10,6 +10,21 @@ import os
 from pathlib import Path
 import numpy as np
 
+MAX_LIVE_STEPS = int(os.environ.get("PYECN_LIVE_MAX_STEPS", "0"))
+
+
+def _downsample_time_axis(array, stride: int):
+    if array is None or stride <= 1:
+        return array
+    arr = np.asarray(array)
+    if arr.ndim == 0:
+        return arr
+    if arr.ndim == 1:
+        return arr[::stride]
+    slicer = [slice(None)] * arr.ndim
+    slicer[-1] = slice(None, None, stride)
+    return arr[tuple(slicer)]
+
 
 def main() -> int:
     if len(sys.argv) < 3:
@@ -64,22 +79,29 @@ def main() -> int:
         shape = getattr(val, "shape", None)
         print(f"  - {key}: {'present' if val is not None else 'missing'} | shape={shape}")
 
+    orig_nt = int(getattr(cell, "nt", 0) or 0)
+    orig_dt = float(getattr(cell, "dt", 1.0) or 1.0)
+    if MAX_LIVE_STEPS > 0 and orig_nt > 0:
+        stride = max(1, int(np.ceil(orig_nt / MAX_LIVE_STEPS)))
+    else:
+        stride = 1
+
     data = {
-        "nt": getattr(cell, "nt", 0),
-        "dt": getattr(cell, "dt", 1.0),
+        "nt": int(np.ceil(orig_nt / stride)) if orig_nt > 0 else 0,
+        "dt": orig_dt * stride,
         "nx": getattr(cell, "nx", 0),
         "ny": getattr(cell, "ny", 0),
         "nstack": getattr(cell, "nstack", 0),
-        "T_record": getattr(cell, "T_record", None),
-        "SoC_Cell_record": getattr(cell, "SoC_Cell_record", None),
-        "SoC_ele_record": getattr(cell, "SoC_ele_record", None),
-        "I_record": getattr(cell, "I_record", None),
-        "I_ele_record": getattr(cell, "I_ele_record", None),
-        "U_pndiff_plot": getattr(cell, "U_pndiff_plot", None),
-        "I0_record": getattr(cell, "I0_record", None),
+        "T_record": _downsample_time_axis(getattr(cell, "T_record", None), stride),
+        "SoC_Cell_record": _downsample_time_axis(getattr(cell, "SoC_Cell_record", None), stride),
+        "SoC_ele_record": _downsample_time_axis(getattr(cell, "SoC_ele_record", None), stride),
+        "I_record": _downsample_time_axis(getattr(cell, "I_record", None), stride),
+        "I_ele_record": _downsample_time_axis(getattr(cell, "I_ele_record", None), stride),
+        "U_pndiff_plot": _downsample_time_axis(getattr(cell, "U_pndiff_plot", None), stride),
+        "I0_record": _downsample_time_axis(getattr(cell, "I0_record", None), stride),
         "SoC": getattr(cell, "SoC", None),
-        "V_record": getattr(cell, "V_record", None),
-        "t_record": getattr(cell, "t_record", None),
+        "V_record": _downsample_time_axis(getattr(cell, "V_record", None), stride),
+        "t_record": _downsample_time_axis(getattr(cell, "t_record", None), stride),
         "xi": getattr(cell, "xi", None),
         "yi": getattr(cell, "yi", None),
         "zi": getattr(cell, "zi", None),
@@ -100,7 +122,7 @@ def main() -> int:
         "Lx_electrodes_real": getattr(cell, "Lx_electrodes_real", None),
         "Ly_electrodes_real": getattr(cell, "Ly_electrodes_real", None),
         "status_FormFactor": getattr(cell, "status_FormFactor", None),
-        "q_4T_record": getattr(cell, "q_4T_record", None),
+        "q_4T_record": _downsample_time_axis(getattr(cell, "q_4T_record", None), stride),
         "V_stencil_4T_ALL": getattr(cell, "V_stencil_4T_ALL", None),
         "ntotal_4T": getattr(cell, "ntotal_4T", None),
     }

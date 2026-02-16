@@ -648,7 +648,8 @@ def run() -> None:
                 part_i = globals()[item_temp2]
                 part_i.fun_mayavi_by_node(module_1.Cells_XYZ_Module[i0,:], part_i.T_record[:,plot_step]-273.15, vmin, vmax, title_string = '°C', colormap_string = 'coolwarm')
     print('Postprocessing is done')
-    mlab.show()
+    if ip.status_visualization_method == 'mayavi':
+        mlab.show()
     if ip.status_Module == 'Yes' or ip.status_Module_4T == 'Yes':
         print('Switch for advance structure is ON')
     else:

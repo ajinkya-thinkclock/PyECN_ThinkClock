@@ -1,0 +1,218 @@
+# LG INR21700 M50 (21700) based on public specs
+# Source: https://www.batterydesign.net/lg-21700-m50/
+# Notes:
+# - Eparam still points to the existing LUT set; replace with M50-specific LUTs if available.
+# - Electrode-layer geometry and material properties are kept from the reference file.
+
+[model]
+General_conditions = "Default"
+nx = 5
+ny = 5
+nstack = 9
+nRC = 3
+Module = "No"
+Module_4T = "No"
+Electrical_type = "ECN_Plain"
+ECN_method = "Neo"
+Model = "EandT"
+E-T_coupling = "two-way"
+Heat_gen = "Yes"
+Entropy = "Yes"
+Ageing = "No"
+BoL_ageing = "No"
+CC = "Yes"
+R0_minus_Rcc = "No"
+Thermal_tab = "Default"
+Electrical_tab = "Default"
+Thermal_partition_can = "Yes"
+
+[runtime_options]
+Count = "Yes"
+Echeck = "No"
+Get_unnecessary_info = "No"
+Q_charact_separate = "No"
+TemBC_vectorCN_check = "No"
+TemBC_smoothing = "No"
+CheckBC_4T = "No"
+Smoothing_stiffness = 1
+
+[operating_conditions]
+C_rate = 1
+I_ext_fpath = ""
+dt = 0.0011429
+SoC_initial = 1
+Current_direction = 1
+IV_mode = 0
+V_highlimit_single = 4.2
+V_lowlimit_single = 2.5
+Tab_surface_scheme = "AllConv"
+Tab_thermal_path = "No"
+Cap_heatgen = "No"
+T_cooling = 298.15
+T_initial = 298.15
+T_fixed = 298.15
+Rcc = 1.3270e-2
+Rcap = 5e-2
+Can_scheme = "AllConv"
+AllConv_h = 30.0
+Thermal_BC_core = "SepAir"
+n_air = 0.5
+CanSepFill_membrane = "No"
+
+[cell]
+Form_factor = "Cylindrical"
+Eparam = "Cylindrical_Cell1"
+Cells_name = ["cell_1"]
+
+[cell.geometry]
+nstack_real = 22
+delta_an_real = 8.615e-5
+delta_ca_real = 7.703e-5
+delta_sep_real = 1.4e-5
+delta_core_real = 1.92e-3
+delta_Al_real = 1.633e-5
+delta_Cu_real = 2.7e-5
+delta_el_real = 1.7718e-4
+Lx_electrodes_real = 5.212683e-2
+Ly_electrodes_real = 5.212683e-2
+Lx_cell = 2.11e-2
+Ly_cell = 2.11e-2
+Casing_delta_polyamide = 2.5e-5
+Casing_delta_polypropylene = 4e-5
+Casing_delta_Al = 4e-5
+
+[cell.electrical]
+Capacity_rated0 = 18000.0
+Nominal_voltage = 3.63
+Energy = 6.552e4
+Conductivity_Al = 3.5e7
+Conductivity_Cu = 6e7
+
+[cell.physical]
+Density_an = 1.555e3
+Density_ca = 2.895e3
+Density_sep = 1.017e3
+Density_Al = 2.702e3
+Density_Cu = 8.933e3
+Casing_density_polyamide = 1.15e3
+Casing_density_polypropylene = 9.2e2
+Casing_density_Al = 2.702e3
+
+[cell.thermal]
+Specific_heat_capacity_an = 1.437e3
+Specific_heat_capacity_ca = 1.27e3
+Specific_heat_capacity_sep = 1.978e3
+Specific_heat_capacity_Al = 9.03e2
+Specific_heat_capacity_Cu = 3.85e2
+Conductivity_an = 1.58
+Conductivity_ca = 1.04
+Conductivity_sep = 3.4e-1
+Conductivity_Al = 2.38e2
+Conductivity_Cu = 3.98e2
+
+[cell.LUTs]
+interp = "Interp"
+interp_order = "linear"
+
+[can.geometry]
+delta_real = 1.6e-4
+delta_surface = 1.05e-4
+delta_base = 1.05e-4
+
+[can.physical]
+Density = 8.05e3
+
+[can.thermal]
+Specific_heat_capacity_real = 4.2e2
+Specific_heat_capacity_surface = 4.2e2
+Specific_heat_capacity_base = 4.2e2
+Conductivity = 4.5e1
+Conductivity_sep_base = 2.6
+
+[tab.geometry]
+A = 5.775e-7
+L = 1.1e-2
+
+[tab.physical]
+Density = 2.702e3
+
+[tab.thermal]
+Conductivity = 2.38e2
+Specific_heat_capacity = 9.03e2
+
+[membrane.geometry]
+delta = 7e-5
+
+[membrane.thermal]
+Conductivity = 3.4e-1
+
+[form-factor-specific]
+LG_can = 7.015e-2
+LG_jellyroll = 6.5e-2
+
+[module]
+General_conditions_module = "Default"
+Modules_name = ["module_1"]
+Modules_4T_name = ["module_1_4T"]
+Current_direction_module = 1
+IV_mode_module = 0
+V_ext_module = 4.2
+SoC_initial_module = 1
+C_rate_module = 1
+BC_module = "Ribbon_cooling"
+BC_module_4T = "Ribbon_cooling"
+BC_ribbon = "Single_Tab_Cooling"
+Cells_num_module = 2
+Parts_num_module = 3
+LUT_Scale_Factor_Rs = 2
+LUT_Scale_Factor_Cs = 0.5
+
+[solver]
+Linsolver_E = "Sparse"
+Linsolver_T = "Sparse"
+Thermal_solver = "CN"
+Linsolver_E_module = "Sparse"
+
+[postprocessing]
+PostProcessor = "Yes"
+PostProcess_cell_id = "cell_1"
+PostProcessor_module = "Yes"
+PostProcess_module_id = "module_1"
+Visualisation_method = "mayavi"
+Temp_levels = 40
+Temp_min = 15.0
+Temp_max = 35.0
+PlotLUT = "No"
+PlotNode = "No"
+Fig1to9 = "Yes"
+PopFig_or_SaveGIF_instant = "No"
+PopFig_or_SaveGIF_replay = "GIF"
+Plot_type_preprocess = "instant"
+Plot_type_postprocess = "reply"
+GIFdownsample_num = 1
+
+[postprocessing.mayavi]
+Show_cell_num = "No"
+Cells_Xinterval_module = 0.05
+Cells_Yinterval_module = 0.0
+Cells_Zinterval_module = 0.0
+
+[ribbon]
+T_cooling = 298.15
+h = 3.0
+
+[ribbon.geometry]
+S_cooling_size_x = 2e-2
+S_cooling_size_y = 5.5e-2
+S_cooling_h = 10.0
+S_cooling_cell_spacing = 3e-2
+S_cooling_ribbon_addlength = 5e-2
+Lz = 5e-3
+nz = 2
+
+[ribbon.physical]
+Density = 2.702e3
+
+[ribbon.thermal]
+Conductivity = 2.38e2
+Specific_heat_capacity = 9.03e2

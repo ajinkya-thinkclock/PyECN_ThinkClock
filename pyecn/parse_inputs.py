@@ -127,14 +127,14 @@ if op_conds["I_ext_fpath"] == "":
 else:  # use time-varying current
     Table_I_ext = np.loadtxt(op_conds["I_ext_fpath"], delimiter=",", skiprows=1)
     if Table_I_ext.ndim == 2:
-        Table_I_ext = Table_I_ext[:, 1]
+        Table_I_ext = Table_I_ext[:, 3]
     nt = len(Table_I_ext) - 1
 if status_FormFactor != "Pouch":
     status_ThermalBC_Core = op_conds["Thermal_BC_core"]
     n_Air = op_conds["n_air"]
     status_AllConv_h = op_conds["AllConv_h"]
-if status_Eparam=='Cylindrical_Cell2':     #This is done just for generating the results for Soft_X paper for CylindricalCell2
-    nt=3334 
+if status_Eparam=='Cylindrical_Cell2':
+    pass
 
 smoothening_stiffness = runtime_opts["Smoothing_stiffness"]
 status_levels = postprocessing["Temp_levels"]

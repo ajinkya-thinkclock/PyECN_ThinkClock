@@ -59,6 +59,9 @@ SIM_STATE = {
     "results_meta": {},
     "cache": {},
     "series_cache": {},
+    "last_render_index": None,
+    "last_figs": None,
+    "last_render_time": 0.0,
 }
 
 MAX_LENGTH = 100
@@ -67,6 +70,8 @@ HEARTBEAT_VALUES = deque(maxlen=MAX_LENGTH)
 START_TIME = time.time()
 PLAYBACK_INTERVAL_MS = 200
 PLAYBACK_MIN_INTERVAL_MS = 10
+BASE_RENDER_INTERVAL_S = 1.0
+PLAYBACK_STEP_MULTIPLIER = 5
 
 app = dash.Dash(__name__)
 app.config.suppress_callback_exceptions = True
@@ -113,6 +118,9 @@ def _load_results(results_path: Path) -> None:
     SIM_STATE["time"] = np.arange(SIM_STATE["nt"]) * dt
     SIM_STATE["cache"] = {}
     SIM_STATE["series_cache"] = {}
+    SIM_STATE["last_render_index"] = None
+    SIM_STATE["last_figs"] = None
+    SIM_STATE["last_render_time"] = 0.0
     SIM_STATE["results_meta"] = {k: getattr(data[k], "shape", None) for k in data.files}
     if hasattr(cell, "T_record"):
         tmin = np.nanmin(cell.T_record)
@@ -318,6 +326,7 @@ def _make_temp_map_fig(cell, time_index: int) -> go.Figure:
         title="Electrode Temperature Map",
         xaxis_title="Unrolled/Width",
         yaxis_title="Axial/Height",
+        uirevision="keep",
         margin=dict(l=40, r=20, t=40, b=40),
     )
     return fig
@@ -357,6 +366,7 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
                 title="Current Density (Electrode)",
                 xaxis_title="Unrolled Distance",
                 yaxis_title="Axial Position",
+                uirevision="keep",
                 margin=dict(l=40, r=20, t=40, b=40),
             )
             return fig
@@ -373,6 +383,7 @@ def _make_current_density_fig(cell, time_index: int) -> go.Figure:
             title="Current Density (2D Slice)",
             xaxis_title="X",
             yaxis_title="Y",
+            uirevision="keep",
             margin=dict(l=40, r=20, t=40, b=40),
         )
         return fig
@@ -390,7 +401,12 @@ def _make_voltage_fig(cell, time_index: int) -> go.Figure:
         end = min(len(time_vec), time_index + 1)
         v = v[:end]
         fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=v, mode="lines", name="Voltage"))
-        fig.update_layout(title="Voltage vs Time", xaxis_title="Time (s)", yaxis_title="Voltage (V)")
+        fig.update_layout(
+            title="Voltage vs Time",
+            xaxis_title="Time (s)",
+            yaxis_title="Voltage (V)",
+            uirevision="keep",
+        )
         return fig
 
     fig = _empty_fig("Voltage vs Time")
@@ -459,7 +475,12 @@ def _make_soc_heatmap_fig(cell, time_index: int) -> go.Figure:
                     hoverinfo="skip",
                 )
             )
-    fig.update_layout(title="SoC Heatmap (Electrode)", xaxis_title="Unrolled Distance", yaxis_title="Axial Position")
+    fig.update_layout(
+        title="SoC Heatmap (Electrode)",
+        xaxis_title="Unrolled Distance",
+        yaxis_title="Axial Position",
+        uirevision="keep",
+    )
     return fig
 
 
@@ -475,7 +496,12 @@ def _make_heatgen_fig(cell, time_index: int) -> go.Figure:
     end = min(len(time_vec), time_index + 1)
     power = power[:end]
     fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=power, mode="lines", name="Heat Gen"))
-    fig.update_layout(title="Heat Generation vs Time", xaxis_title="Time (s)", yaxis_title="W")
+    fig.update_layout(
+        title="Heat Generation vs Time",
+        xaxis_title="Time (s)",
+        yaxis_title="W",
+        uirevision="keep",
+    )
     return fig
 
 
@@ -494,7 +520,12 @@ def _make_soc_fig(cell, time_index: int) -> go.Figure:
         return fig
     end = min(len(time_vec), time_index + 1)
     fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=soc[:end], mode="lines", name="SoC"))
-    fig.update_layout(title="State of Charge", xaxis_title="Time (s)", yaxis_title="SoC (%)")
+    fig.update_layout(
+        title="State of Charge",
+        xaxis_title="Time (s)",
+        yaxis_title="SoC (%)",
+        uirevision="keep",
+    )
     return fig
 
 
@@ -516,7 +547,12 @@ def _make_current_fig(cell, time_index: int) -> go.Figure:
         current[0] = current[1]
     end = min(len(time_vec), time_index + 1)
     fig = go.Figure(data=go.Scatter(x=time_vec[:end], y=current[:end], mode="lines", name="Current"))
-    fig.update_layout(title="Current vs Time", xaxis_title="Time (s)", yaxis_title="Current (A)")
+    fig.update_layout(
+        title="Current vs Time",
+        xaxis_title="Time (s)",
+        yaxis_title="Current (A)",
+        uirevision="keep",
+    )
     return fig
 
 
@@ -537,7 +573,12 @@ def _make_temp_stats_fig(cell, time_index: int) -> go.Figure:
     fig.add_trace(go.Scatter(x=t[:end], y=tavg[:end], name="Avg"))
     fig.add_trace(go.Scatter(x=t[:end], y=tmin[:end], name="Min"))
     fig.add_trace(go.Scatter(x=t[:end], y=tmax[:end], name="Max"))
-    fig.update_layout(title="Temperature Min/Max/Avg", xaxis_title="Time (s)", yaxis_title="°C")
+    fig.update_layout(
+        title="Temperature Min/Max/Avg",
+        xaxis_title="Time (s)",
+        yaxis_title="°C",
+        uirevision="keep",
+    )
     return fig
 
 
@@ -558,6 +599,7 @@ def _make_temp3d_fig(cell, time_index: int) -> go.Figure:
     fig.update_layout(
         title="3D Temperature Map",
         scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
+        uirevision="keep",
     )
     return fig
 
@@ -568,6 +610,7 @@ def _empty_fig(title: str) -> go.Figure:
         title=title,
         xaxis_title="",
         yaxis_title="",
+        uirevision="keep",
         margin=dict(l=40, r=20, t=40, b=40),
     )
     return fig
@@ -582,6 +625,8 @@ app.layout = html.Div(
                 dcc.Upload(id="config-upload", children=html.Button("Upload Config TOML")),
                 dcc.Upload(id="current-upload", children=html.Button("Upload Current CSV (optional)")),
                 html.Button("Run Simulation", id="run-btn", n_clicks=0),
+                dcc.Upload(id="results-upload", children=html.Button("Upload Results NPZ")),
+                html.Button("Load Results", id="load-btn", n_clicks=0),
                 dcc.Loading(
                     id="run-loading",
                     type="default",
@@ -678,13 +723,26 @@ app.layout = html.Div(
     Output("sim-meta", "data"),
     Output("time-slider", "max"),
     Input("run-btn", "n_clicks"),
+    Input("load-btn", "n_clicks"),
     Input("status-interval", "n_intervals"),
     State("config-upload", "contents"),
     State("config-upload", "filename"),
     State("current-upload", "contents"),
     State("current-upload", "filename"),
+    State("results-upload", "contents"),
+    State("results-upload", "filename"),
 )
-def update_status(n_clicks, n_intervals, config_contents, config_filename, current_contents, current_filename):
+def update_status(
+    n_clicks,
+    load_clicks,
+    n_intervals,
+    config_contents,
+    config_filename,
+    current_contents,
+    current_filename,
+    results_contents,
+    results_filename,
+):
     ctx = dash.callback_context
     triggered = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
 
@@ -707,6 +765,17 @@ def update_status(n_clicks, n_intervals, config_contents, config_filename, curre
             SIM_STATE["last_message"] = "Simulation started..."
         except Exception as exc:
             SIM_STATE["last_message"] = f"Simulation error: {exc}"
+    elif triggered == "load-btn":
+        if not results_contents or not results_filename:
+            SIM_STATE["last_message"] = "Please upload a results NPZ file."
+        else:
+            try:
+                results_path = _save_upload(results_contents, results_filename)
+                SIM_STATE["results_path"] = str(results_path)
+                _load_results(results_path)
+                SIM_STATE["last_message"] = f"Results loaded: {results_filename}"
+            except Exception as exc:
+                SIM_STATE["last_message"] = f"Load error: {exc}"
 
     nt = SIM_STATE.get("nt", 0)
     status = SIM_STATE.get("last_message", "Idle")
@@ -755,8 +824,9 @@ def update_play_interval(speed_value):
         speed = max(1, int(speed_value))
     except (TypeError, ValueError):
         speed = 1
-    interval_ms = max(PLAYBACK_MIN_INTERVAL_MS, int(PLAYBACK_INTERVAL_MS / speed))
-    info = f"Interval: {interval_ms} ms (target {int(1000/interval_ms)} fps)"
+    interval_ms = max(PLAYBACK_MIN_INTERVAL_MS, int(PLAYBACK_INTERVAL_MS))
+    step = max(1, speed * PLAYBACK_STEP_MULTIPLIER)
+    info = f"Interval: {interval_ms} ms (step {step} frames)"
     return interval_ms, info, {"interval_ms": interval_ms, "speed": speed}
 
 
@@ -777,7 +847,7 @@ def advance_time(n, playback_meta, play_state, current_value, sim_meta):
     step = 1
     if isinstance(playback_meta, dict):
         try:
-            step = max(1, int(playback_meta.get("speed", 1)))
+            step = max(1, int(playback_meta.get("speed", 1)) * PLAYBACK_STEP_MULTIPLIER)
         except (TypeError, ValueError):
             step = 1
     next_value = current_value + step
@@ -797,8 +867,9 @@ def advance_time(n, playback_meta, play_state, current_value, sim_meta):
     Output("temp-stats", "figure"),
     Input("time-slider", "value"),
     Input("status-interval", "n_intervals"),
+    Input("playback-meta", "data"),
 )
-def update_plots(time_index, _n_intervals):
+def update_plots(time_index, _n_intervals, playback_meta):
     cell = SIM_STATE.get("cell")
     if cell is None:
         return (
@@ -816,16 +887,39 @@ def update_plots(time_index, _n_intervals):
     if SIM_STATE.get("nt", 0) > 0:
         time_index = min(time_index, SIM_STATE["nt"] - 1)
 
-    temp_map = _make_temp_map_fig(cell, time_index)
-    soc_heatmap = _make_soc_heatmap_fig(cell, time_index)
-    voltage_fig = _make_voltage_fig(cell, time_index)
-    current_plot = _make_current_fig(cell, time_index)
-    soc_fig = _make_soc_fig(cell, time_index)
-    current_fig = _make_current_density_fig(cell, time_index)
-    heatgen_fig = _make_heatgen_fig(cell, time_index)
-    temp_stats = _make_temp_stats_fig(cell, time_index)
+    speed = 1
+    if isinstance(playback_meta, dict):
+        try:
+            speed = max(1, int(playback_meta.get("speed", 1)))
+        except (TypeError, ValueError):
+            speed = 1
+    render_step = max(1, speed * PLAYBACK_STEP_MULTIPLIER)
+    render_index = (time_index // render_step) * render_step
+    render_index = min(render_index, SIM_STATE.get("nt", 1) - 1)
 
-    return temp_map, soc_heatmap, voltage_fig, current_plot, soc_fig, current_fig, heatgen_fig, temp_stats
+    render_interval_s = max(BASE_RENDER_INTERVAL_S, BASE_RENDER_INTERVAL_S * speed)
+    now = time.monotonic()
+    if now - SIM_STATE.get("last_render_time", 0.0) < render_interval_s:
+        if SIM_STATE.get("last_figs") is not None:
+            return SIM_STATE["last_figs"]
+
+    if SIM_STATE.get("last_render_index") == render_index and SIM_STATE.get("last_figs") is not None:
+        return SIM_STATE["last_figs"]
+
+    temp_map = _make_temp_map_fig(cell, render_index)
+    soc_heatmap = _make_soc_heatmap_fig(cell, render_index)
+    voltage_fig = _make_voltage_fig(cell, render_index)
+    current_plot = _make_current_fig(cell, render_index)
+    soc_fig = _make_soc_fig(cell, render_index)
+    current_fig = _make_current_density_fig(cell, render_index)
+    heatgen_fig = _make_heatgen_fig(cell, render_index)
+    temp_stats = _make_temp_stats_fig(cell, render_index)
+
+    figs = (temp_map, soc_heatmap, voltage_fig, current_plot, soc_fig, current_fig, heatgen_fig, temp_stats)
+    SIM_STATE["last_render_index"] = render_index
+    SIM_STATE["last_figs"] = figs
+    SIM_STATE["last_render_time"] = now
+    return figs
 
 
 @app.callback(
