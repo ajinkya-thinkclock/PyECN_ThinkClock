@@ -131,16 +131,7 @@ def _load_results(results_path: Path) -> None:
         return
 
     cache = SIM_STATE["cache"]
-    if hasattr(cell, "Al_4T") and hasattr(cell, "xi_4T") and hasattr(cell, "yi_4T"):
-        n_v = cell.ny
-        n_h = int(np.size(cell.Al_4T) / n_v)
-        ind0_Al_4T = cell.Al_4T.reshape(n_v, n_h)
-        x = np.asarray(cell.xi_4T[ind0_Al_4T], dtype=float)
-        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
-        y = (lg - np.asarray(cell.yi_4T[ind0_Al_4T], dtype=float))
-        cache["temp_map_ind0"] = ind0_Al_4T
-        cache["temp_map_x"] = x
-        cache["temp_map_y"] = y
+    temp_map_set = False
 
     if all(hasattr(cell, k) for k in ["Elb_4T", "xi_4T", "yi_4T", "List_node2ele_4T"]):
         n_v = cell.ny
@@ -161,6 +152,21 @@ def _load_results(results_path: Path) -> None:
         cache["ind0_ele_Elb_4T"] = ind0_ele_Elb_4T
         cache["array_h"] = array_h
         cache["array_v"] = array_v
+        cache["temp_map_ind0"] = ind0_Elb_4T
+        cache["temp_map_x"] = array_h
+        cache["temp_map_y"] = array_v
+        temp_map_set = True
+
+    if (not temp_map_set) and hasattr(cell, "Al_4T") and hasattr(cell, "xi_4T") and hasattr(cell, "yi_4T"):
+        n_v = cell.ny
+        n_h = int(np.size(cell.Al_4T) / n_v)
+        ind0_Al_4T = cell.Al_4T.reshape(n_v, n_h)
+        x = np.asarray(cell.xi_4T[ind0_Al_4T], dtype=float)
+        lg = float(cell.LG_Jellyroll) if np.ndim(cell.LG_Jellyroll) == 0 else float(np.asarray(cell.LG_Jellyroll).reshape(-1)[0])
+        y = (lg - np.asarray(cell.yi_4T[ind0_Al_4T], dtype=float))
+        cache["temp_map_ind0"] = ind0_Al_4T
+        cache["temp_map_x"] = x
+        cache["temp_map_y"] = y
 
     series = SIM_STATE["series_cache"]
     time_vec = SIM_STATE["time"]

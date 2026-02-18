@@ -433,6 +433,25 @@ class Core(Form_Factor, Read_LUTs):
             self.RC_pair[:,2]=( self.fun_Ri_Interped(self.SoC_ele[ind_ele_RCform],self.T_ele_RCform,self.RC_pair[:,4].astype(int))*self.delta_El/self.V_ele[ind_ele_RCform]    ).reshape(-1)   
         if self.status_LUTinterp=='Fitting':                  
             self.RC_pair[:,2]=( self.fun_Ri_Fitted(self.SoC_ele[ind_ele_RCform],self.T_ele_RCform,self.RC_pair[:,4].astype(int))*self.delta_El/self.V_ele[ind_ele_RCform]    ).reshape(-1)   
+        if not hasattr(self, "Rct_scale"):
+            pct_env = os.environ.get("PYECN_RCT_PCT")
+            if pct_env:
+                try:
+                    pct = abs(float(pct_env)) / 100.0
+                except ValueError:
+                    pct = 0.0
+            else:
+                pct = 0.0
+            if pct > 0:
+                seed_env = os.environ.get("PYECN_RCT_SEED")
+                rng = np.random.default_rng(int(seed_env)) if seed_env else np.random.default_rng()
+                low = max(0.0, 1.0 - pct)
+                high = 1.0 + pct
+                self.Rct_scale = rng.uniform(low, high, size=(self.nECN, self.nRC))
+            else:
+                self.Rct_scale = None
+        if self.Rct_scale is not None:
+            self.RC_pair[self.ind0_ele_RC_pair, 2] *= self.Rct_scale
         te_Ri_interp=time.time() if self.status_Count=='Yes' else []; self.duration_Ri_interp=te_Ri_interp-ts_Ri_interp if self.status_Count=='Yes' else []
         ts_Ci_interp=time.time() if self.status_Count=='Yes' else [] 
         if self.status_LUTinterp=='Interp':
@@ -648,6 +667,25 @@ class Core(Form_Factor, Read_LUTs):
             self.RC_pair[:,2]=( self.fun_Ri_Interped(self.SoC_ele[ind_ele_RCform],self.T_ele_RCform,self.RC_pair[:,4].astype(int))*self.delta_El/self.V_ele[ind_ele_RCform]    ).reshape(-1)   
         if self.status_LUTinterp=='Fitting':
             self.RC_pair[:,2]=( self.fun_Ri_Fitted(self.SoC_ele[ind_ele_RCform],self.T_ele_RCform,self.RC_pair[:,4].astype(int))*self.delta_El/self.V_ele[ind_ele_RCform]    ).reshape(-1)   
+        if not hasattr(self, "Rct_scale"):
+            pct_env = os.environ.get("PYECN_RCT_PCT")
+            if pct_env:
+                try:
+                    pct = abs(float(pct_env)) / 100.0
+                except ValueError:
+                    pct = 0.0
+            else:
+                pct = 0.0
+            if pct > 0:
+                seed_env = os.environ.get("PYECN_RCT_SEED")
+                rng = np.random.default_rng(int(seed_env)) if seed_env else np.random.default_rng()
+                low = max(0.0, 1.0 - pct)
+                high = 1.0 + pct
+                self.Rct_scale = rng.uniform(low, high, size=(self.nECN, self.nRC))
+            else:
+                self.Rct_scale = None
+        if self.Rct_scale is not None:
+            self.RC_pair[self.ind0_ele_RC_pair, 2] *= self.Rct_scale
         te_Ri_interp=time.time() if self.status_Count=='Yes' else []; self.duration_Ri_interp=te_Ri_interp-ts_Ri_interp if self.status_Count=='Yes' else []
         ts_Ci_interp=time.time() if self.status_Count=='Yes' else [] 
         if self.status_LUTinterp=='Interp':

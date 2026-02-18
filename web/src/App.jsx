@@ -11,6 +11,7 @@ import {
 const SPEED_OPTIONS = [1, 2, 5, 10, 20];
 const PLAYBACK_INTERVAL_MS = 200;
 const STEP_MULTIPLIER = 5;
+const HEATMAP_COLORSCALE = "RdBu";
 
 function EmptyPlot({ note }) {
   return (
@@ -40,6 +41,26 @@ function makeLayout(title) {
   };
 }
 
+function buildHeatmapPlot(map, title, colorbarTitle, xTitle, yTitle) {
+  return {
+    data: [
+      {
+        type: "heatmap",
+        z: map.z,
+        x: map.x,
+        y: map.y,
+        colorscale: HEATMAP_COLORSCALE,
+        colorbar: { title: colorbarTitle }
+      }
+    ],
+    layout: {
+      ...makeLayout(title),
+      xaxis: { title: xTitle },
+      yaxis: { title: yTitle }
+    }
+  };
+}
+
 export default function App() {
   const [status, setStatus] = useState({});
   const [logText, setLogText] = useState("");
@@ -51,8 +72,11 @@ export default function App() {
   const [frame, setFrame] = useState(null);
   const [configFile, setConfigFile] = useState(null);
   const [currentFile, setCurrentFile] = useState(null);
+  const [measuredFile, setMeasuredFile] = useState(null);
   const [resultsFile, setResultsFile] = useState(null);
   const [actionMessage, setActionMessage] = useState("Idle");
+  const [rctPercent, setRctPercent] = useState("");
+  const [rctIndex, setRctIndex] = useState(0);
 
   useEffect(() => {
     const handle = setInterval(async () => {
@@ -88,33 +112,26 @@ export default function App() {
         setFrame(null);
         return;
       }
-      const data = await fetchFrame(timeIndex);
+      const data = await fetchFrame(timeIndex, rctIndex);
       setFrame(data);
     };
     load();
-  }, [timeIndex, nt]);
+  }, [timeIndex, nt, rctIndex]);
 
-  const tempMapPlot = useMemo(() => {
-    const temp = frame?.temp_map;
+  const tempMapElbPlot = useMemo(() => {
+    const temp = frame?.temp_maps?.elb || frame?.temp_maps?.combined;
     if (!temp) return null;
-    return {
-      data: [
-        {
-          type: "heatmap",
-          z: temp.z,
-          x: temp.x,
-          y: temp.y,
-          colorscale: "RdBu",
-          zsmooth: "best",
-          colorbar: { title: "C" }
-        }
-      ],
-      layout: { ...makeLayout("Electrode Temperature Map"), xaxis: { title: "Unrolled/Width" }, yaxis: { title: "Axial/Height" } }
-    };
+    return buildHeatmapPlot(temp, "Electrode Temperature (Elb)", "C", "Unrolled/Width", "Axial/Height");
   }, [frame]);
 
-  const socHeatmapPlot = useMemo(() => {
-    const soc = frame?.soc_heatmap;
+  const tempMapElrPlot = useMemo(() => {
+    const temp = frame?.temp_maps?.elr;
+    if (!temp) return null;
+    return buildHeatmapPlot(temp, "Electrode Temperature (Elr)", "C", "Unrolled/Width", "Axial/Height");
+  }, [frame]);
+
+  const socHeatmapElbPlot = useMemo(() => {
+    const soc = frame?.soc_heatmaps?.elb || frame?.soc_heatmaps?.combined;
     if (!soc) return null;
     const traces = [
       {
@@ -122,8 +139,7 @@ export default function App() {
         z: soc.z,
         x: soc.x,
         y: soc.y,
-        colorscale: "Viridis",
-        zsmooth: "best",
+        colorscale: HEATMAP_COLORSCALE,
         colorbar: { title: "SoC %" }
       }
     ];
@@ -133,8 +149,7 @@ export default function App() {
         z: soc.grad,
         x: soc.x,
         y: soc.y,
-        colorscale: "Turbo",
-        zsmooth: "best",
+        colorscale: HEATMAP_COLORSCALE,
         opacity: 0.35,
         showscale: false,
         hoverinfo: "skip"
@@ -142,15 +157,58 @@ export default function App() {
     }
     return {
       data: traces,
-      layout: { ...makeLayout("SoC Heatmap"), xaxis: { title: "Unrolled Distance" }, yaxis: { title: "Axial Position" } }
+      layout: { ...makeLayout("SoC Heatmap (Elb)"), xaxis: { title: "Unrolled Distance" }, yaxis: { title: "Axial Position" } }
+    };
+  }, [frame]);
+
+  const socHeatmapElrPlot = useMemo(() => {
+    const soc = frame?.soc_heatmaps?.elr;
+    if (!soc) return null;
+    const traces = [
+      {
+        type: "heatmap",
+        z: soc.z,
+        x: soc.x,
+        y: soc.y,
+        colorscale: HEATMAP_COLORSCALE,
+        colorbar: { title: "SoC %" }
+      }
+    ];
+    if (soc.grad) {
+      traces.push({
+        type: "heatmap",
+        z: soc.grad,
+        x: soc.x,
+        y: soc.y,
+        colorscale: HEATMAP_COLORSCALE,
+        opacity: 0.35,
+        showscale: false,
+        hoverinfo: "skip"
+      });
+    }
+    return {
+      data: traces,
+      layout: { ...makeLayout("SoC Heatmap (Elr)"), xaxis: { title: "Unrolled Distance" }, yaxis: { title: "Axial Position" } }
     };
   }, [frame]);
 
   const voltagePlot = useMemo(() => {
     const v = frame?.voltage;
     if (!v) return null;
+    const measured = frame?.voltage_measured;
+    const traces = [{ type: "scatter", mode: "lines", x: v.time, y: v.values, name: "Simulated" }];
+    if (measured && measured.time && measured.values) {
+        traces.push({
+          type: "scatter",
+          mode: "lines",
+          x: measured.time,
+          y: measured.values,
+          name: "Measured",
+          line: { color: "#f97316", width: 2 }
+        });
+    }
     return {
-      data: [{ type: "scatter", mode: "lines", x: v.time, y: v.values, name: "Voltage" }],
+      data: traces,
       layout: { ...makeLayout("Voltage vs Time"), xaxis: { title: "Time (s)" }, yaxis: { title: "Voltage (V)" } }
     };
   }, [frame]);
@@ -177,23 +235,25 @@ export default function App() {
     };
   }, [frame]);
 
-  const currentDensityPlot = useMemo(() => {
-    const cd = frame?.current_density;
+  const currentDensityElbPlot = useMemo(() => {
+    const cd = frame?.current_density_maps?.elb || frame?.current_density_maps?.combined;
     if (!cd) return null;
-    return {
-      data: [
-        {
-          type: "heatmap",
-          z: cd.z,
-          x: cd.x || undefined,
-          y: cd.y || undefined,
-          colorscale: "Blues",
-          zsmooth: "best",
-          colorbar: { title: "A/m2" }
-        }
-      ],
-      layout: { ...makeLayout("Current Density"), xaxis: { title: "Unrolled Distance" }, yaxis: { title: "Axial Position" } }
-    };
+    return buildHeatmapPlot(cd, "Current Density (Elb)", "A/m2", "Unrolled Distance", "Axial Position");
+  }, [frame]);
+
+  const currentDensityElrPlot = useMemo(() => {
+    const cd = frame?.current_density_maps?.elr;
+    if (!cd) return null;
+    return buildHeatmapPlot(cd, "Current Density (Elr)", "A/m2", "Unrolled Distance", "Axial Position");
+  }, [frame]);
+
+  const rctList = useMemo(() => {
+    const rct = frame?.rct_series;
+    if (!rct) return null;
+    if (!Array.isArray(rct.values) || rct.values.length === 0) {
+      return null;
+    }
+    return rct.values.map((value, idx) => `Node ${idx}: ${value}`);
   }, [frame]);
 
   const heatgenPlot = useMemo(() => {
@@ -223,7 +283,7 @@ export default function App() {
       setActionMessage("Please select a config TOML file.");
       return;
     }
-    const res = await runSimulation(configFile, currentFile);
+    const res = await runSimulation(configFile, currentFile, measuredFile, rctPercent);
     setActionMessage(res.message || res.status || "Run started.");
   };
 
@@ -232,7 +292,7 @@ export default function App() {
       setActionMessage("Please select a results NPZ file.");
       return;
     }
-    const res = await loadResults(resultsFile);
+    const res = await loadResults(resultsFile, measuredFile);
     setActionMessage(res.message || res.status || "Results loaded.");
   };
 
@@ -263,6 +323,21 @@ export default function App() {
             <span>Current CSV (optional)</span>
             <input type="file" accept=".csv" onChange={(e) => setCurrentFile(e.target.files?.[0] || null)} />
           </label>
+          <label className="file-input">
+            <span>Measured Voltage CSV (optional)</span>
+            <input type="file" accept=".csv" onChange={(e) => setMeasuredFile(e.target.files?.[0] || null)} />
+          </label>
+          <label className="file-input">
+            <span>Rct spread (%)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              placeholder="0"
+              value={rctPercent}
+              onChange={(e) => setRctPercent(e.target.value)}
+            />
+          </label>
           <button className="primary" onClick={handleRun}>
             Run Simulation
           </button>
@@ -287,6 +362,10 @@ export default function App() {
           <div className="diag-card">
             <div className="diag-title">Results meta</div>
             <pre>{Object.keys(meta || {}).length ? JSON.stringify(meta, null, 2) : "(none)"}</pre>
+          </div>
+          <div className="diag-card">
+            <div className="diag-title">Rct values (selected RC)</div>
+            <pre>{rctList ? rctList.join("\n") : "No Rct scale data"}</pre>
           </div>
         </div>
       </section>
@@ -319,26 +398,59 @@ export default function App() {
           </div>
           <div className="frame-note">Frame {timeIndex} / {Math.max(0, nt - 1)}</div>
         </div>
+        <div className="playback">
+          <div className="speed">
+            <span>Rct branch</span>
+            <select value={rctIndex} onChange={(e) => setRctIndex(Number(e.target.value))}>
+              {Array.from({ length: frame?.rct_series?.rc_count || 1 }, (_, idx) => (
+                <option key={idx} value={idx}>
+                  RC {idx + 1}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </section>
 
       <section className="plots">
-        <PlotCard title="Electrode Temperature Map">
-          {tempMapPlot ? (
-            <Plot data={tempMapPlot.data} layout={tempMapPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+        <PlotCard title="Electrode Temperature (Elb)">
+          {tempMapElbPlot ? (
+            <Plot data={tempMapElbPlot.data} layout={tempMapElbPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
           ) : (
             <EmptyPlot />
           )}
         </PlotCard>
-        <PlotCard title="Current Density">
-          {currentDensityPlot ? (
-            <Plot data={currentDensityPlot.data} layout={currentDensityPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+        <PlotCard title="Electrode Temperature (Elr)">
+          {tempMapElrPlot ? (
+            <Plot data={tempMapElrPlot.data} layout={tempMapElrPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
           ) : (
             <EmptyPlot />
           )}
         </PlotCard>
-        <PlotCard title="SoC Heatmap">
-          {socHeatmapPlot ? (
-            <Plot data={socHeatmapPlot.data} layout={socHeatmapPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+        <PlotCard title="Current Density (Elb)">
+          {currentDensityElbPlot ? (
+            <Plot data={currentDensityElbPlot.data} layout={currentDensityElbPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+          ) : (
+            <EmptyPlot />
+          )}
+        </PlotCard>
+        <PlotCard title="Current Density (Elr)">
+          {currentDensityElrPlot ? (
+            <Plot data={currentDensityElrPlot.data} layout={currentDensityElrPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+          ) : (
+            <EmptyPlot />
+          )}
+        </PlotCard>
+        <PlotCard title="SoC Heatmap (Elb)">
+          {socHeatmapElbPlot ? (
+            <Plot data={socHeatmapElbPlot.data} layout={socHeatmapElbPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
+          ) : (
+            <EmptyPlot />
+          )}
+        </PlotCard>
+        <PlotCard title="SoC Heatmap (Elr)">
+          {socHeatmapElrPlot ? (
+            <Plot data={socHeatmapElrPlot.data} layout={socHeatmapElrPlot.layout} className="plot" useResizeHandler style={{ width: "100%", height: "100%" }} />
           ) : (
             <EmptyPlot />
           )}

@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import numpy as np
 
-MAX_LIVE_STEPS = int(os.environ.get("PYECN_LIVE_MAX_STEPS", "0"))
+MAX_LIVE_STEPS = int(os.environ.get("PYECN_LIVE_MAX_STEPS", "5000"))
 
 
 def _downsample_time_axis(array, stride: int):
@@ -125,6 +125,7 @@ def main() -> int:
         "q_4T_record": _downsample_time_axis(getattr(cell, "q_4T_record", None), stride),
         "V_stencil_4T_ALL": getattr(cell, "V_stencil_4T_ALL", None),
         "ntotal_4T": getattr(cell, "ntotal_4T", None),
+        "Rct_scale": getattr(cell, "Rct_scale", None),
     }
 
     # Save only non-None arrays/values
