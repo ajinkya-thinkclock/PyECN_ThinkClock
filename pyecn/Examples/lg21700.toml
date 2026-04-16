@@ -52,7 +52,7 @@ T_cooling = 298.15
 T_initial = 298.15
 T_fixed = 298.15
 Rcc = 6.7e-3
-Rcap = 3.0e-2
+Rcap = 1.0e-2
 Can_scheme = "AllConv"
 AllConv_h = 30.0
 Thermal_BC_core = "SepAir"
@@ -164,7 +164,7 @@ BC_module_4T = "Ribbon_cooling"
 BC_ribbon = "Single_Tab_Cooling"
 Cells_num_module = 2
 Parts_num_module = 3
-LUT_Scale_Factor_Rs = 2
+LUT_Scale_Factor_Rs = 1.2
 LUT_Scale_Factor_Cs = 0.5
 
 [solver]
