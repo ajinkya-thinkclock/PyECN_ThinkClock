@@ -65,6 +65,18 @@ pip install -r dev-requirements.txt
 
 For the React/Vite frontend, install Node dependencies in `web/` (see Live browser visualization below).
 
+## Quickstart (first run)
+
+Run the full visualization suite to confirm your environment is working:
+
+```bash
+python pyecn/visualization_modules/viz_all.py
+```
+
+Expected results:
+- Console summary with cell name, time steps, and data ranges
+- PNG plots written to the current directory (or to the output directory you pass)
+
 ## Running PyECN
 
 Config paths are resolved relative to the `pyecn/` folder.
@@ -88,6 +100,53 @@ python
 >>> pyecn.run()
 Enter config file name:
 pouch.toml
+```
+
+## Inputs and outputs
+
+Inputs:
+- TOML config files live under [pyecn](pyecn/) and [pyecn/Examples](pyecn/Examples); `python -m pyecn` expects paths relative to [pyecn](pyecn/).
+- External current profiles are CSV files referenced by `operating_conditions.I_ext_fpath` or uploaded in the live UI.
+- LUT files referenced by configs live under [pyecn/Input_LUTs](pyecn/Input_LUTs).
+
+Outputs:
+- Core runs keep results in memory; plotting and postprocessing behavior is controlled by the `postprocessing` section in the TOML.
+- Visualization scripts write PNGs to the output directory you pass (default: current working directory).
+- The live API stores uploads and generated results under [pyecn/browser_visualizations/uploads](pyecn/browser_visualizations/uploads) as `run_*.toml` and `results_*.npz`.
+
+### Sample config snippet
+
+Minimal example (from [pyecn/pouch.toml](pyecn/pouch.toml)):
+
+```toml
+[model]
+Model = "EandT"
+ECN_method = "Neo"
+nx = 7
+ny = 7
+nstack = 3
+nRC = 2
+
+[operating_conditions]
+C_rate = 1
+I_ext_fpath = ""
+dt = 1
+SoC_initial = 1
+Current_direction = 1
+V_highlimit_single = 4.2
+V_lowlimit_single = 2.7
+
+[cell]
+Form_factor = "Pouch"
+Eparam = "Pouch_Cell1"
+Cells_name = ["cell_1"]
+
+[postprocessing]
+PostProcessor = "Yes"
+Visualisation_method = "mayavi"
+Temp_levels = 40
+Temp_min = 15.0
+Temp_max = 35.0
 ```
 
 ## Visualization modules
@@ -156,6 +215,26 @@ This generates 15+ visualization files including:
 
 ## Live browser visualization (ThinkClock)
 
+### Architecture overview
+
+```mermaid
+flowchart LR
+  A[TOML config] --> B[PyECN core run]
+  B --> C[Cell object in memory]
+  C --> D[viz_* scripts]
+  D --> E[PNG outputs]
+
+  A --> F[FastAPI live_api]
+  J[Current CSV] --> F
+  F --> G[run_pyecn_job]
+  G --> H[results_*.npz]
+  F --> I[React/Vite UI]
+
+  A --> K[Dash live_dash]
+  J --> K
+  K --> G
+```
+
 ### Option A: FastAPI + React/Vite frontend (recommended)
 
 1. Start the API server (from the repo root):
@@ -176,6 +255,16 @@ npm run dev
 
 The frontend proxies `/api` to http://127.0.0.1:8000. See `web/README.md` for details.
 
+### Frontend build and preview
+
+```bash
+cd web
+npm run build
+npm run preview
+```
+
+Vite prints the local preview URL in the terminal.
+
 ### Option B: Dash-only UI
 
 ```bash
@@ -183,6 +272,39 @@ python -m pyecn.browser_visualizations.live_dash
 ```
 
 Open http://127.0.0.1:8050/ in your browser.
+
+### API cheat sheet
+
+Base URL: http://127.0.0.1:8000
+
+- GET /api/health
+- GET /api/sim/status
+- GET /api/sim/log
+- POST /api/sim/run (form fields: config, current, measured, rct_percent)
+- POST /api/results/load (form fields: results, measured)
+- GET /api/plots/frame?time_index=0&rct_index=0
+
+Examples:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+curl -X POST http://127.0.0.1:8000/api/sim/run -F "config=@pyecn/Examples/pouch_Fig_4a.toml"
+curl -X POST http://127.0.0.1:8000/api/sim/run -F "config=@pyecn/Examples/pouch_Fig_4a.toml" -F "current=@pyecn/training_daq_20260207_160608_cell1_0001.csv" -F "rct_percent=5"
+curl -X POST http://127.0.0.1:8000/api/results/load -F "results=@path/to/results.npz"
+```
+
+## Environment variables
+
+- `PYECN_LIVE_MAX_STEPS` (default 5000): maximum time steps saved in live results; set to 0 to disable downsampling.
+- `PYECN_RCT_PCT`: apply a +/- percent random spread to Rct values across RC elements (live API also accepts `rct_percent`).
+- `PYECN_RCT_SEED`: seed for deterministic Rct randomization.
+
+## Performance tips and known limitations
+
+- Large models can make the live UI slow; reduce `nt`, downsample with `PYECN_LIVE_MAX_STEPS`, or increase `frame_skip` in live thermal.
+- `viz_all.py` uses placeholder 2D spatial data; for real spatial maps use the live UI or [pyecn/visualization_modules/viz_spatial_2d.py](pyecn/visualization_modules/viz_spatial_2d.py).
+- Mayavi plots require a local GUI and can be slow on remote or headless setups; disable Mayavi in the config for headless runs.
+- Vite dev server proxies to port 8000; update [web/vite.config.js](web/vite.config.js) if you change the API port.
 
 ## Troubleshooting
 
